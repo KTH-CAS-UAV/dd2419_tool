@@ -1,0 +1,17 @@
+[workspace]
+authors = ["Daniel Duberg <danielduberg@gmail.com>"]
+channels = ["conda-forge"]
+name = "dd2419_generator"
+platforms = ["linux-64", "osx-arm64", "win-64"]
+version = "0.1.0"
+
+[tasks]
+generate = "python generate.py"
+evaluate = "python evaluate.py"
+
+[dependencies]
+python = ">=3.14.3,<3.15"
+pandas = ">=3.0.1,<4"
+matplotlib = ">=3.10.8,<4"
+shapely = ">=2.1.2,<3"
+scipy = ">=1.15.2,<2"
