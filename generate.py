@@ -168,46 +168,6 @@ def get_validated_int_input(prompt_text: str, label: str, min_val: int, max_val:
         print(f"Error: {label} must be an integer.")
         sys.exit(1)
 
-def export_map_to_csv(folder: str, 
-                      ws_poly: Polygon, 
-                      start_pose: dict, 
-                      known_objects: list[dict], 
-                      unknown_objects: list[dict], 
-                      known_boxes: list[dict], 
-                      unknown_boxes: list[dict], 
-                      obstacles: list[dict]) -> None:
-    """Consolidated logic to export map state to three CSV files and save a visualization plot.
-    
-    Files generated:
-    - workspace.csv: The boundary polygon coordinates.
-    - map.csv: Known items only (S, O, B).
-    - map_complete.csv: All items (Known, Unknown, and Obstacles).
-    - visualization.png: A top-down plot focusing on known items.
-    - visualization_complete.png: A top-down plot of the full environment.
-    """
-    # -- Export to CSV --
-    ws_coords = list(zip(*ws_poly.exterior.xy))[:-1]
-    pd.DataFrame(ws_coords, columns=['x', 'y']).to_csv(os.path.join(folder, 'workspace.csv'), index=False)
-    
-    map_data = []
-    map_data.append({'Type': 'S', 'x': start_pose['x'], 'y': start_pose['y'], 'angle': start_pose['angle']})
-    for o in known_objects:
-        map_data.append({'Type': 'O', 'x': o['x'], 'y': o['y'], 'angle': 0})
-    for b in known_boxes:
-        map_data.append({'Type': 'B', 'x': b['x'], 'y': b['y'], 'angle': b['angle']})
-    pd.DataFrame(map_data).to_csv(os.path.join(folder, 'map.csv'), index=False)
-    
-    map_complete_data = list(map_data)
-    for o in unknown_objects:
-        map_complete_data.append({'Type': 'O', 'x': o['x'], 'y': o['y'], 'angle': 0})
-    for b in unknown_boxes:
-        map_complete_data.append({'Type': 'B', 'x': b['x'], 'y': b['y'], 'angle': b['angle']})
-    for obs in obstacles:
-        map_complete_data.append({'Type': 'P', 'x': obs['x'], 'y': obs['y'], 'angle': 0})
-    pd.DataFrame(map_complete_data).to_csv(os.path.join(folder, 'map_complete.csv'), index=False)
-
-    print(f"CSV files saved to `{folder}`: workspace.csv, map.csv, map_complete.csv")
-
 def save_plot(folder: str, 
               filename: str, 
               ws_poly: Polygon, 
@@ -410,7 +370,7 @@ def export_map_to_csv(folder: str,
                   known_objects_base, unknown_objects_base, known_boxes_base, unknown_boxes_base, obstacles_base,
                   unused_objects=unused_objects_base, unused_boxes=unused_boxes_base,
                   title_suffix="All Possible Placements",
-                  show_pose=False, show_obstacles=False, is_placement=True)
+                  show_pose=True, show_obstacles=True, is_placement=True)
         print(f"Visualizations saved to `{folder}`: visualization.png, visualization_complete.png, visualization_placement.png")
     else:
         print(f"Visualizations saved to `{folder}`: visualization.png, visualization_complete.png")
