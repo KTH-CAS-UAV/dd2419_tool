@@ -59,6 +59,10 @@ BOXES = [
     {'x': 639, 'y': 100, 'angle': 40}
 ]
 
+OBSTACLE_X_RANGE = (10, 500)
+OBSTACLE_Y_RANGE = (10, 250)
+OBSTACLE_DISTANCE_THRESHOLD = 50.0
+
 def is_same(p1: dict, p2: dict) -> bool:
     """Check if two items are at the same (x, y) position within a small tolerance.
     
@@ -71,13 +75,13 @@ def is_same(p1: dict, p2: dict) -> bool:
     """
     return np.isclose(p1['x'], p2['x']) and np.isclose(p1['y'], p2['y'])
 
-OBSTACLES = [
-    {'x': 150, 'y': 100, 'angle': 0},
-    {'x': 450, 'y': 50, 'angle': 0},
-    {'x': 900, 'y': 350, 'angle': 0},
-    {'x': 250, 'y': 180, 'angle': 0},
-    {'x': 650, 'y': 250, 'angle': 0}
-]
+def is_too_close(pos: dict, items: list[dict], threshold: float = OBSTACLE_DISTANCE_THRESHOLD) -> bool:
+    """Check if a position is within threshold distance of any item in a list."""
+    for item in items:
+        dist = np.sqrt((pos['x'] - item['x'])**2 + (pos['y'] - item['y'])**2)
+        if dist < threshold:
+            return True
+    return False
 
 def transform_point(x: float, y: float, tx: float, ty: float, rot_deg: float) -> tuple[float, float]:
     """Apply global rotation and translation to a point."""
@@ -450,7 +454,19 @@ def generate_fresh_map(folder: str) -> None:
     known_boxes = [b.copy() for b in known_boxes_base]
     unknown_boxes = [b.copy() for b in unknown_boxes_base]
 
-    obstacles = sample_unique(OBSTACLES, num_obstacles_count, "obstacles")
+    # Dynamically sample obstacles with 50cm clearance
+    obstacles_base = []
+    forbidden_items = [start_pose_base] + sampled_objs + sampled_boxes
+    for _ in range(num_obstacles_count):
+        for attempt in range(100):
+            cand = {'x': random.uniform(*OBSTACLE_X_RANGE), 'y': random.uniform(*OBSTACLE_Y_RANGE)}
+            if not is_too_close(cand, forbidden_items + obstacles_base):
+                obstacles_base.append(cand)
+                break
+        else:
+            print("Warning: Could not place all obstacles with requested clearance.")
+
+    obstacles = [o.copy() for o in obstacles_base]
 
     unused_objects_base = [o for o in OBJECTS if not any(is_same(o, so) for so in sampled_objs)]
     unused_boxes_base = [b for b in BOXES if not any(is_same(b, sb) for sb in sampled_boxes)]
@@ -486,7 +502,7 @@ def generate_fresh_map(folder: str) -> None:
                       known_objects_base=known_objects_base, unknown_objects_base=unknown_objects_base,
                       known_boxes_base=known_boxes_base, unknown_boxes_base=unknown_boxes_base,
                       unused_objects_base=unused_objects_base, unused_boxes_base=unused_boxes_base,
-                      obstacles_base=obstacles)
+                      obstacles_base=obstacles_base)
 
 def update_existing_map(folder: str) -> None:
     """Selective update of an existing map in base coordinates.
@@ -552,7 +568,7 @@ def update_existing_map(folder: str) -> None:
     
     if 'P' in existing_map_complete['Type'].values:
         obs_df = existing_map_complete[existing_map_complete['Type'] == 'P']
-        obstacles_base = [snap_to_global(reverse_item({'x': r['x'], 'y': r['y']}), OBSTACLES) for _, r in obs_df.iterrows()]
+        obstacles_base = [reverse_item({'x': r['x'], 'y': r['y']}) for _, r in obs_df.iterrows()]
     else:
         obstacles_base = []
 

@@ -4,7 +4,7 @@ This repository contains a suite of tools for generating and evaluating tasks fo
 
 ## Features
 
-- **Randomized Task Generation**: Create maps with varying numbers of known and unknown objects/boxes.
+- **Randomized Task Generation**: Create maps with varying numbers of known and unknown objects/boxes, including dynamically placed obstacles.
 - **Global Transformations**: Apply random translations and rotations to the entire environment to find bugs and test robustness.
 - **Interactive Updates**: Selectively update an existing task (change start pose, re-sample items, or apply new transforms) while maintaining spatial alignment.
 - **Automated Evaluation**: Compare a solution map against the ground truth using the Hungarian algorithm for optimal matching.
@@ -40,7 +40,11 @@ If the `<output_folder>` already exists, you will be asked whether to **Overwrit
 - **Sampling Logic**: During an update, the tool only prompts for the number of *known* items, keeping the total set (from `map_complete.csv`) fixed.
 - **Transform Handling**: The tool automatically handles "reverse and re-apply" transformation logic to ensure everything stays aligned.
 
-### 2. Evaluating a Solution
+**Configuration:**
+At the top of `generate.py`, you can configure the following parameters for obstacle sampling:
+- `OBSTACLE_X_RANGE`: The `(min, max)` x-coordinates for random obstacle placement.
+- `OBSTACLE_Y_RANGE`: The `(min, max)` y-coordinates for random obstacle placement.
+- `OBSTACLE_DISTANCE_THRESHOLD`: The minimum required distance (cm) between obstacles and any other map items (pose, objects, boxes).
 
 To evaluate a solution, place your `map_solution.csv` in the task folder and run:
 
