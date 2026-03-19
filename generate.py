@@ -59,6 +59,18 @@ BOXES = [
     {'x': 639, 'y': 100, 'angle': 40}
 ]
 
+def is_same(p1: dict, p2: dict) -> bool:
+    """Check if two items are at the same (x, y) position within a small tolerance.
+    
+    Args:
+        p1: First item dictionary (must contain 'x' and 'y').
+        p2: Second item dictionary (must contain 'x' and 'y').
+        
+    Returns:
+        True if the positions match, False otherwise.
+    """
+    return np.isclose(p1['x'], p2['x']) and np.isclose(p1['y'], p2['y'])
+
 OBSTACLES = [
     {'x': 150, 'y': 100, 'angle': 0},
     {'x': 450, 'y': 50, 'angle': 0},
@@ -192,19 +204,55 @@ def export_map_to_csv(folder: str,
 
     print(f"CSV files saved to `{folder}`: workspace.csv, map.csv, map_complete.csv")
 
-    # -- Visualization --
-    def save_plot(filename: str, include_unknown: bool) -> None:
-        plt.figure(figsize=(12, 10))
-        ax = plt.gca()
-        
-        x_ws, y_ws = ws_poly.exterior.xy
-        plt.plot(x_ws, y_ws, marker='.', linestyle='-', color='deepskyblue', alpha=0.8)
-        
-        legend_elements = [
-            plt.Line2D([0], [0], color='deepskyblue', alpha=0.8, linestyle='-', marker='.', label='Workspace perimeter')
-        ]
+def save_plot(folder: str, 
+              filename: str, 
+              ws_poly: Polygon, 
+              start_pose: dict, 
+              known_objects: list[dict], 
+              unknown_objects: list[dict], 
+              known_boxes: list[dict], 
+              unknown_boxes: list[dict], 
+              obstacles: list[dict],
+              unused_objects: list[dict] = None,
+              unused_boxes: list[dict] = None,
+              title_suffix: str = "",
+              show_pose: bool = True,
+              show_obstacles: bool = True,
+              is_placement: bool = False) -> None:
+    """Generates and saves a top-down visualization plot of the map.
+    
+    This function handles both the standard map visualizations (known/complete) 
+    and the simplified placement visualization.
+    
+    Args:
+        folder: Output directory.
+        filename: Name of the file to save.
+        ws_poly: Workspace boundary polygon.
+        start_pose: Starting pose dictionary (x, y, angle).
+        known_objects: List of known objects.
+        unknown_objects: List of unknown objects.
+        known_boxes: List of known boxes.
+        unknown_boxes: List of unknown boxes.
+        obstacles: List of obstacles.
+        unused_objects: List of objects not sampled from the dataset.
+        unused_boxes: List of boxes not sampled from the dataset.
+        title_suffix: Suffix for the plot title.
+        show_pose: Whether to render the start pose arrow.
+        show_obstacles: Whether to render obstacle markers.
+        is_placement: If True, uses simplified 'Used' vs 'Unused' styling.
+    """
+    plt.figure(figsize=(12, 10))
+    ax = plt.gca()
+    
+    x_ws, y_ws = ws_poly.exterior.xy
+    plt.plot(x_ws, y_ws, marker='.', linestyle='-', color='deepskyblue', alpha=0.8)
+    
+    legend_elements = [
+        plt.Line2D([0], [0], color='deepskyblue', alpha=0.8, linestyle='-', marker='.', label='Workspace perimeter')
+    ]
 
-        # Start Pose
+    # Start Pose
+    if show_pose:
         angle_rad = np.radians(start_pose['angle'])
         u, v = np.cos(angle_rad), np.sin(angle_rad)
         plt.arrow(start_pose['x'], start_pose['y'], u * 20, v * 20, 
@@ -212,56 +260,156 @@ def export_map_to_csv(folder: str,
                   length_includes_head=True, zorder=6)
         legend_elements.append(plt.Line2D([0], [0], color='green', marker='$\u279E$', linestyle='None', markersize=10, label='Start Pose'))
 
-        # Objects
-        obj_size = 10
-        for row in known_objects:
-            ax.add_patch(Rectangle((row['x'] - obj_size/2, row['y'] - obj_size/2), 
-                                     obj_size, obj_size, color='darkred', alpha=0.8))
+    # Objects
+    obj_size = 10
+    for row in known_objects:
+        ax.add_patch(Rectangle((row['x'] - obj_size/2, row['y'] - obj_size/2), 
+                                 obj_size, obj_size, color='darkred', alpha=0.8))
+    
+    if is_placement:
+        legend_elements.append(plt.Line2D([0], [0], color='darkred', marker='s', linestyle='None', alpha=0.8, label='Used Object'))
+    else:
         legend_elements.append(plt.Line2D([0], [0], color='darkred', marker='s', linestyle='None', alpha=0.8, label='Known Object'))
 
-        if include_unknown:
-            for row in unknown_objects:
-                ax.add_patch(Rectangle((row['x'] - obj_size/2, row['y'] - obj_size/2), 
-                                         obj_size, obj_size, facecolor='none', edgecolor='darkred', linewidth=2, alpha=0.8))
+    if unknown_objects:
+        for row in unknown_objects:
+            ax.add_patch(Rectangle((row['x'] - obj_size/2, row['y'] - obj_size/2), 
+                                     obj_size, obj_size, facecolor='none' if not is_placement else 'darkred', 
+                                     edgecolor='darkred', linewidth=2, alpha=0.8))
+        if not is_placement:
             legend_elements.append(plt.Line2D([0], [0], color='darkred', marker='s', linestyle='None', markerfacecolor='none', markersize=10, markeredgewidth=2, label='Unknown Object'))
 
-        # Boxes
-        box_width, box_height = 24, 16
-        for row in known_boxes:
-            rect = Rectangle((-box_width/2, -box_height/2), box_width, box_height, color='navy', alpha=0.6)
+    if unused_objects:
+        for row in unused_objects:
+            ax.add_patch(Rectangle((row['x'] - obj_size/2, row['y'] - obj_size/2), 
+                                     obj_size, obj_size, color='gray', alpha=0.3))
+        legend_elements.append(plt.Line2D([0], [0], color='gray', marker='s', linestyle='None', alpha=0.3, label='Unused Object'))
+
+    # Boxes
+    box_width, box_height = 24, 16
+    for row in known_boxes:
+        rect = Rectangle((-box_width/2, -box_height/2), box_width, box_height, color='navy', alpha=0.6)
+        t = Affine2D().rotate_deg(row['angle']).translate(row['x'], row['y']) + ax.transData
+        rect.set_transform(t)
+        ax.add_patch(rect)
+    
+    if is_placement:
+        legend_elements.append(Rectangle((0, 0), 1.5, 1, color='navy', alpha=0.6, label='Used Box'))
+    else:
+        legend_elements.append(Rectangle((0, 0), 1.5, 1, color='navy', alpha=0.6, label='Known Box'))
+
+    if unknown_boxes:
+        for row in unknown_boxes:
+            rect = Rectangle((-box_width/2, -box_height/2), box_width, box_height, 
+                             facecolor='none' if not is_placement else 'navy', 
+                             edgecolor='navy', linewidth=2, alpha=0.6)
             t = Affine2D().rotate_deg(row['angle']).translate(row['x'], row['y']) + ax.transData
             rect.set_transform(t)
             ax.add_patch(rect)
-        legend_elements.append(Rectangle((0, 0), 1.5, 1, color='navy', alpha=0.6, label='Known Box'))
-
-        if include_unknown:
-            for row in unknown_boxes:
-                rect = Rectangle((-box_width/2, -box_height/2), box_width, box_height, facecolor='none', edgecolor='navy', linewidth=2, alpha=0.6)
-                t = Affine2D().rotate_deg(row['angle']).translate(row['x'], row['y']) + ax.transData
-                rect.set_transform(t)
-                ax.add_patch(rect)
+        if not is_placement:
             legend_elements.append(Rectangle((0, 0), 1.5, 1, facecolor='none', edgecolor='navy', linewidth=2, alpha=0.6, label='Unknown Box'))
 
-        # Obstacles
-        if include_unknown and obstacles:
-            x_obs = [row['x'] for row in obstacles]
-            y_obs = [row['y'] for row in obstacles]
-            plt.scatter(x_obs, y_obs, color='black', marker='x', s=100, zorder=8)
-            legend_elements.append(plt.Line2D([0], [0], color='black', marker='x', linestyle='None', markersize=10, label='Obstacle'))
+    if unused_boxes:
+        for row in unused_boxes:
+            rect = Rectangle((-box_width/2, -box_height/2), box_width, box_height, color='slategray', alpha=0.2)
+            t = Affine2D().rotate_deg(row['angle']).translate(row['x'], row['y']) + ax.transData
+            rect.set_transform(t)
+            ax.add_patch(rect)
+        legend_elements.append(Rectangle((0, 0), 1.5, 1, color='slategray', alpha=0.2, label='Unused Box'))
 
-        plt.xlabel('X coordinate (cm)')
-        plt.ylabel('Y coordinate (cm)')
-        plt.axis('equal')
-        plt.title(f'DD2419 Task Generator: {"Complete Map" if include_unknown else "Known Map"}')
-        plt.legend(handles=legend_elements, handlelength=1.5, handleheight=1.0)
-        plt.grid(True, linestyle='--', alpha=0.6)
-        
-        plt.savefig(os.path.join(folder, filename))
-        plt.close()
+    # Obstacles
+    if show_obstacles and obstacles:
+        x_obs = [row['x'] for row in obstacles]
+        y_obs = [row['y'] for row in obstacles]
+        plt.scatter(x_obs, y_obs, color='black', marker='x', s=100, zorder=8)
+        legend_elements.append(plt.Line2D([0], [0], color='black', marker='x', linestyle='None', markersize=10, label='Obstacle'))
 
-    save_plot("visualization.png", include_unknown=False)
-    save_plot("visualization_complete.png", include_unknown=True)
-    print(f"Visualizations saved to `{folder}`: visualization.png, visualization_complete.png")
+    plt.xlabel('X coordinate (cm)')
+    plt.ylabel('Y coordinate (cm)')
+    plt.axis('equal')
+    plt.title(f'DD2419 Task Generator: {title_suffix}')
+    plt.legend(handles=legend_elements, handlelength=1.5, handleheight=1.0)
+    plt.grid(True, linestyle='--', alpha=0.6)
+    
+    plt.savefig(os.path.join(folder, filename))
+    plt.close()
+
+def export_map_to_csv(folder: str, 
+                      ws_poly: Polygon, 
+                      start_pose: dict, 
+                      known_objects: list[dict], 
+                      unknown_objects: list[dict], 
+                      known_boxes: list[dict], 
+                      unknown_boxes: list[dict], 
+                      obstacles: list[dict],
+                      # Base items for placement visualization
+                      ws_poly_base: Polygon = None,
+                      start_pose_base: dict = None,
+                      known_objects_base: list[dict] = None,
+                      unknown_objects_base: list[dict] = None,
+                      known_boxes_base: list[dict] = None,
+                      unknown_boxes_base: list[dict] = None,
+                      unused_objects_base: list[dict] = None,
+                      unused_boxes_base: list[dict] = None,
+                      obstacles_base: list[dict] = None) -> None:
+    """Export map state to three CSV files and save visualization plots.
+    
+    Generates:
+    - workspace.csv: The boundary polygon coordinates.
+    - map.csv: Known items only (S, O, B).
+    - map_complete.csv: All items (Known, Unknown, and Obstacles).
+    - visualization.png: Known items (transformed).
+    - visualization_complete.png: All items (transformed).
+    - visualization_placement.png: All items + unused items (base coordinates, simplified).
+    
+    Args:
+        folder: Destination directory.
+        [... other arguments reflect current and base coordinate states ...]
+    """
+    # -- Export to CSV --
+    ws_coords = list(zip(*ws_poly.exterior.xy))[:-1]
+    pd.DataFrame(ws_coords, columns=['x', 'y']).to_csv(os.path.join(folder, 'workspace.csv'), index=False)
+    
+    map_data = []
+    map_data.append({'Type': 'S', 'x': start_pose['x'], 'y': start_pose['y'], 'angle': start_pose['angle']})
+    for o in known_objects:
+        map_data.append({'Type': 'O', 'x': o['x'], 'y': o['y'], 'angle': 0})
+    for b in known_boxes:
+        map_data.append({'Type': 'B', 'x': b['x'], 'y': b['y'], 'angle': b['angle']})
+    pd.DataFrame(map_data).to_csv(os.path.join(folder, 'map.csv'), index=False)
+    
+    map_complete_data = list(map_data)
+    for o in unknown_objects:
+        map_complete_data.append({'Type': 'O', 'x': o['x'], 'y': o['y'], 'angle': 0})
+    for b in unknown_boxes:
+        map_complete_data.append({'Type': 'B', 'x': b['x'], 'y': b['y'], 'angle': b['angle']})
+    for obs in obstacles:
+        map_complete_data.append({'Type': 'P', 'x': obs['x'], 'y': obs['y'], 'angle': 0})
+    pd.DataFrame(map_complete_data).to_csv(os.path.join(folder, 'map_complete.csv'), index=False)
+
+    print(f"CSV files saved to `{folder}`: workspace.csv, map.csv, map_complete.csv")
+
+    # -- Visualizations --
+    # 1. Known Map
+    save_plot(folder, "visualization.png", ws_poly, start_pose, 
+              known_objects, [], known_boxes, [], [], 
+              title_suffix="Known Map")
+    
+    # 2. Complete Map
+    save_plot(folder, "visualization_complete.png", ws_poly, start_pose, 
+              known_objects, unknown_objects, known_boxes, unknown_boxes, obstacles, 
+              title_suffix="Complete Map")
+
+    # 3. Placement Map (Base Coordinates)
+    if ws_poly_base and start_pose_base:
+        save_plot(folder, "visualization_placement.png", ws_poly_base, start_pose_base,
+                  known_objects_base, unknown_objects_base, known_boxes_base, unknown_boxes_base, obstacles_base,
+                  unused_objects=unused_objects_base, unused_boxes=unused_boxes_base,
+                  title_suffix="All Possible Placements",
+                  show_pose=False, show_obstacles=False, is_placement=True)
+        print(f"Visualizations saved to `{folder}`: visualization.png, visualization_complete.png, visualization_placement.png")
+    else:
+        print(f"Visualizations saved to `{folder}`: visualization.png, visualization_complete.png")
 
 def generate_fresh_map(folder: str) -> None:
     """Handles the creation of a completely new map or an overwrite.
@@ -285,19 +433,27 @@ def generate_fresh_map(folder: str) -> None:
     shifted_workspace = WORKSPACE_DATA[shift:] + WORKSPACE_DATA[:shift]
     print(f"Generating task in `{folder}`")
 
-    start_pose = random.choice(START_POSES)
+    start_pose_base = random.choice(START_POSES)
+    start_pose = start_pose_base.copy()
 
     total_objs_needed = num_known_objects + num_unknown_objects
     sampled_objs = sample_unique(OBJECTS, total_objs_needed, "objects")
-    known_objects = sampled_objs[:num_known_objects]
-    unknown_objects = sampled_objs[num_known_objects:]
+    known_objects_base = sampled_objs[:num_known_objects]
+    unknown_objects_base = sampled_objs[num_known_objects:]
+    known_objects = [o.copy() for o in known_objects_base]
+    unknown_objects = [o.copy() for o in unknown_objects_base]
 
     total_boxes_needed = num_known_boxes + num_unknown_boxes
     sampled_boxes = sample_unique(BOXES, total_boxes_needed, "boxes")
-    known_boxes = sampled_boxes[:num_known_boxes]
-    unknown_boxes = sampled_boxes[num_known_boxes:]
+    known_boxes_base = sampled_boxes[:num_known_boxes]
+    unknown_boxes_base = sampled_boxes[num_known_boxes:]
+    known_boxes = [b.copy() for b in known_boxes_base]
+    unknown_boxes = [b.copy() for b in unknown_boxes_base]
 
     obstacles = sample_unique(OBSTACLES, num_obstacles_count, "obstacles")
+
+    unused_objects_base = [o for o in OBJECTS if not any(is_same(o, so) for so in sampled_objs)]
+    unused_boxes_base = [b for b in BOXES if not any(is_same(b, sb) for sb in sampled_boxes)]
 
     original_ws_poly = Polygon(shifted_workspace)
     if transform_workspace:
@@ -325,7 +481,12 @@ def generate_fresh_map(folder: str) -> None:
     else:
         ws_poly = original_ws_poly
 
-    export_map_to_csv(folder, ws_poly, start_pose, known_objects, unknown_objects, known_boxes, unknown_boxes, obstacles)
+    export_map_to_csv(folder, ws_poly, start_pose, known_objects, unknown_objects, known_boxes, unknown_boxes, obstacles,
+                      ws_poly_base=original_ws_poly, start_pose_base=start_pose_base,
+                      known_objects_base=known_objects_base, unknown_objects_base=unknown_objects_base,
+                      known_boxes_base=known_boxes_base, unknown_boxes_base=unknown_boxes_base,
+                      unused_objects_base=unused_objects_base, unused_boxes_base=unused_boxes_base,
+                      obstacles_base=obstacles)
 
 def update_existing_map(folder: str) -> None:
     """Selective update of an existing map in base coordinates.
@@ -365,27 +526,44 @@ def update_existing_map(folder: str) -> None:
             new_item['angle'] = (item['angle'] - rot_old) % 360
         return new_item
 
-    # Load and reverse all items to base coordinates
+    def snap_to_global(item: dict, global_list: list[dict]) -> dict:
+        """Find the closest matching item in a global dataset to ensure coordinate consistency.
+        
+        This prevents floating-point drift when reverse-transforming objects for placement maps.
+        
+        Args:
+            item: The item to snap.
+            global_list: The list of canonical items to match against.
+            
+        Returns:
+            The canonical item from global_list if a match is found, otherwise the input item.
+        """
+        for g_item in global_list:
+            if is_same(item, g_item):
+                return g_item.copy()
+        return item
+
+    # Load and reverse all items to base coordinates with snapping
     all_objects_df = existing_map_complete[existing_map_complete['Type'] == 'O']
-    all_objects_base = [reverse_item({'x': r['x'], 'y': r['y'], 'angle': r['angle']}) for _, r in all_objects_df.iterrows()]
+    all_objects_base = [snap_to_global(reverse_item({'x': r['x'], 'y': r['y'], 'angle': r['angle']}), OBJECTS) for _, r in all_objects_df.iterrows()]
     
     all_boxes_df = existing_map_complete[existing_map_complete['Type'] == 'B']
-    all_boxes_base = [reverse_item({'x': r['x'], 'y': r['y'], 'angle': r['angle']}) for _, r in all_boxes_df.iterrows()]
+    all_boxes_base = [snap_to_global(reverse_item({'x': r['x'], 'y': r['y'], 'angle': r['angle']}), BOXES) for _, r in all_boxes_df.iterrows()]
     
     if 'P' in existing_map_complete['Type'].values:
         obs_df = existing_map_complete[existing_map_complete['Type'] == 'P']
-        obstacles_base = [reverse_item({'x': r['x'], 'y': r['y']}) for _, r in obs_df.iterrows()]
+        obstacles_base = [snap_to_global(reverse_item({'x': r['x'], 'y': r['y']}), OBSTACLES) for _, r in obs_df.iterrows()]
     else:
         obstacles_base = []
 
     start_row = existing_map[existing_map['Type'] == 'S'].iloc[0]
-    start_pose_base = reverse_item({'x': start_row['x'], 'y': start_row['y'], 'angle': start_row['angle']})
+    start_pose_base = snap_to_global(reverse_item({'x': start_row['x'], 'y': start_row['y'], 'angle': start_row['angle']}), START_POSES)
     
     known_objects_df = existing_map[existing_map['Type'] == 'O']
-    known_objects_base = [reverse_item({'x': r['x'], 'y': r['y'], 'angle': r['angle']}) for _, r in known_objects_df.iterrows()]
+    known_objects_base = [snap_to_global(reverse_item({'x': r['x'], 'y': r['y'], 'angle': r['angle']}), OBJECTS) for _, r in known_objects_df.iterrows()]
     
     known_boxes_df = existing_map[existing_map['Type'] == 'B']
-    known_boxes_base = [reverse_item({'x': r['x'], 'y': r['y'], 'angle': r['angle']}) for _, r in known_boxes_df.iterrows()]
+    known_boxes_base = [snap_to_global(reverse_item({'x': r['x'], 'y': r['y'], 'angle': r['angle']}), BOXES) for _, r in known_boxes_df.iterrows()]
 
     # Apply Updates in Base Coordinates
     if update_start_pose:
@@ -409,9 +587,6 @@ def update_existing_map(folder: str) -> None:
             cnt = 1
         known_boxes_base = random.sample(all_boxes_base, cnt)
         print(f"Updated known boxes (sampled {cnt} from {len(all_boxes_base)}).")
-
-    def is_same(p1, p2):
-        return np.isclose(p1['x'], p2['x']) and np.isclose(p1['y'], p2['y'])
 
     unknown_objects_base = [o for o in all_objects_base if not any(is_same(o, ko) for ko in known_objects_base)]
     unknown_boxes_base = [b for b in all_boxes_base if not any(is_same(b, kb) for kb in known_boxes_base)]
@@ -446,7 +621,15 @@ def update_existing_map(folder: str) -> None:
     unknown_boxes = [apply_final_trans(b) for b in unknown_boxes_base]
     obstacles = [apply_final_trans(o) for o in obstacles_base]
 
-    export_map_to_csv(folder, ws_poly, start_pose, known_objects, unknown_objects, known_boxes, unknown_boxes, obstacles)
+    unused_objects_base = [o for o in OBJECTS if not any(is_same(o, ao) for ao in all_objects_base)]
+    unused_boxes_base = [b for b in BOXES if not any(is_same(b, ab) for ab in all_boxes_base)]
+
+    export_map_to_csv(folder, ws_poly, start_pose, known_objects, unknown_objects, known_boxes, unknown_boxes, obstacles,
+                      ws_poly_base=Polygon(shifted_ws), start_pose_base=start_pose_base,
+                      known_objects_base=known_objects_base, unknown_objects_base=unknown_objects_base,
+                      known_boxes_base=known_boxes_base, unknown_boxes_base=unknown_boxes_base,
+                      unused_objects_base=unused_objects_base, unused_boxes_base=unused_boxes_base,
+                      obstacles_base=obstacles_base)
 
 def main() -> None:
     """Main execution function for the task generator."""
