@@ -5,7 +5,7 @@ This repository contains a suite of tools for generating and evaluating tasks fo
 ## Features
 
 - **Randomized Task Generation**: Create maps with varying numbers of known and unknown objects/boxes.
-- **Global Transformations**: Apply random translations and rotations to the entire environment to test robustness.
+- **Global Transformations**: Apply random translations and rotations to the entire environment to find bugs and test robustness.
 - **Interactive Updates**: Selectively update an existing task (change start pose, re-sample items, or apply new transforms) while maintaining spatial alignment.
 - **Automated Evaluation**: Compare a solution map against the ground truth using the Hungarian algorithm for optimal matching.
 - **Visual Feedback**: Generates separate top-down visualizations for the known map (`visualization.png`) and the complete map (`visualization_complete.png`).
