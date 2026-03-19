@@ -26,9 +26,9 @@ def calculate_distance_matrix(df1: pd.DataFrame, df2: pd.DataFrame) -> np.ndarra
     Returns:
         A distance matrix of shape (len(df1), len(df2)).
     """
-    n = len(df1); m = len(df2)
+    n, m = len(df1), len(df2)
     dist_matrix = np.zeros((n, m))
-    list1 = df1.reset_index(); list2 = df2.reset_index()
+    list1, list2 = df1.reset_index(), df2.reset_index()
     for i in range(n):
         for j in range(m):
             dist_matrix[i, j] = np.sqrt((list1.at[i, 'x'] - list2.at[j, 'x'])**2 + 
@@ -131,7 +131,11 @@ def plot_map_on_ax(ax: plt.Axes, df: pd.DataFrame, workspace_df: pd.DataFrame | 
                 rect = Rectangle((-box_w/2, -box_h/2), box_w, box_h, facecolor='none', edgecolor='navy', linewidth=2, alpha=0.6)
             rect.set_transform(Affine2D().rotate_deg(row.get('angle', 0)).translate(x, y) + ax.transData)
             ax.add_patch(rect)
-    ax.set_aspect('equal'); ax.set_title(title); ax.grid(True, linestyle='--', alpha=0.3)
+        elif t == 'P':
+            ax.scatter(x, y, color='black', marker='x', s=100, zorder=8)
+    ax.set_aspect('equal')
+    ax.set_title(title)
+    ax.grid(True, linestyle='--', alpha=0.3)
 
 def main():
     parser = argparse.ArgumentParser(description='DD2419 Map Evaluator',
@@ -188,7 +192,7 @@ def main():
     print(verdict); print("="*40)
 
     fig, (ax_l, ax_r) = plt.subplots(1, 2, figsize=(20, 15))
-    plot_map_on_ax(ax_l, df_comp[df_comp['Type'].isin(['S', 'O', 'B'])], df_ws, "Ground Truth")
+    plot_map_on_ax(ax_l, df_comp[df_comp['Type'].isin(['S', 'O', 'B', 'P'])], df_ws, "Ground Truth")
     plot_map_on_ax(ax_r, df_sol, df_ws, "Solution")
     
     cmap = plt.get_cmap('tab20')
@@ -199,6 +203,7 @@ def main():
         plt.Line2D([0], [0], color='darkred', marker='s', linestyle='None', markerfacecolor='none', markersize=10, markeredgewidth=2, label='Unknown Object'),
         Rectangle((0, 0), 1.5, 1, color='navy', alpha=0.6, label='Known Box'),
         Rectangle((0, 0), 1.5, 1, facecolor='none', edgecolor='navy', linewidth=2, alpha=0.6, label='Unknown Box'),
+        plt.Line2D([0], [0], color='black', marker='x', linestyle='None', markersize=10, label='Obstacle'),
         plt.Line2D([0], [0], color='green', linestyle='-', linewidth=2, label='Known Match'),
         plt.Line2D([0], [0], color='gray', linestyle='--', linewidth=1.5, label='Unknown Match')
     ]
