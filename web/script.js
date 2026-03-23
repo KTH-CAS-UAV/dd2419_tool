@@ -733,11 +733,30 @@ function updateHoverTooltip() {
     } else {
         const label = hoverItem._label || hoverItem.Type || 'Item';
         const hasAngle = hoverItem.angle !== undefined && hoverItem.angle !== null;
+        const ref = hoverItem._ref || hoverItem;
+        const match = evaluationResult?.matches?.find(m => m.gt === ref || m.sol === ref);
+
+        let nearestDist = null;
+        if (!match && evaluationResult && evalData) {
+            const dist2 = (a, b) => Math.sqrt((a.x - b.x) ** 2 + (a.y - b.y) ** 2);
+            if (hoverItem._label?.startsWith('Missing')) {
+                const matchedSols = new Set(evaluationResult.matches.map(m => m.sol));
+                const ds = evalData.solution.filter(s => !matchedSols.has(s)).map(s => dist2(ref, s));
+                if (ds.length) nearestDist = Math.min(...ds);
+            } else if (hoverItem._label?.startsWith('Penalty')) {
+                const matchedGTs = new Set(evaluationResult.matches.map(m => m.gt));
+                const ds = [...evalData.gt.known, ...evalData.gt.unknown].filter(g => !matchedGTs.has(g)).map(g => dist2(ref, g));
+                if (ds.length) nearestDist = Math.min(...ds);
+            }
+        }
+
         el.innerHTML =
             `<div class="map-tooltip-label">${label}</div>` +
             `<div class="map-tooltip-row"><span>x</span><span>${hoverItem.x.toFixed(1)} cm</span></div>` +
             `<div class="map-tooltip-row"><span>y</span><span>${hoverItem.y.toFixed(1)} cm</span></div>` +
-            (hasAngle ? `<div class="map-tooltip-row"><span>angle</span><span>${hoverItem.angle.toFixed(1)}°</span></div>` : '');
+            (hasAngle ? `<div class="map-tooltip-row"><span>angle</span><span>${hoverItem.angle.toFixed(1)}°</span></div>` : '') +
+            (match ? `<div class="map-tooltip-row"><span>error</span><span>${match.dist.toFixed(1)} cm</span></div>` : '') +
+            (nearestDist !== null ? `<div class="map-tooltip-row"><span>nearest</span><span>${nearestDist.toFixed(1)} cm</span></div>` : '');
     }
 
     // Position near cursor, flip if near right edge
@@ -1329,9 +1348,9 @@ window.onload = () => {
             };
             all = [
                 { ...data.gt.start, _label: 'Start Pose' },
-                ...[...data.gt.known, ...data.gt.unknown].map(i => ({ ...i, _label: gtLabel(i) })),
+                ...[...data.gt.known, ...data.gt.unknown].map(i => ({ ...i, _label: gtLabel(i), _ref: i })),
                 ...data.gt.obstacles.map(i => ({ ...i, _label: 'Obstacle' })),
-                ...data.solution.map(i => ({ ...i, _label: solLabel(i) })),
+                ...data.solution.map(i => ({ ...i, _label: solLabel(i), _ref: i })),
             ];
         }
 
