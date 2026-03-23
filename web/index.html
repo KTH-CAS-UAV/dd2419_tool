@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DD2419 Task Generator</title>
+    <link rel="stylesheet" href="styles.css">
+    <link
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&family=Outfit:wght@400;600;800&display=swap"
+        rel="stylesheet">
+</head>
+
+<body>
+    <div class="background-glow"></div>
+
+    <main class="container">
+        <header class="glass-panel header-section">
+            <h1 class="gradient-text">DD2419 Tools</h1>
+            <p class="subtitle">Generate randomized task environments and evaluate solutions</p>
+            <button id="themeToggle" class="theme-toggle-btn" title="Cycle Theme: Light > Dark > Auto">🌓</button>
+        </header>
+
+        <div class="mode-toggle-container">
+            <div class="mode-switch glass-panel">
+                <button class="mode-btn active" data-mode="generate">Generate Task</button>
+                <button class="mode-btn" data-mode="evaluate">Evaluate Solution</button>
+            </div>
+        </div>
+
+        <div class="main-grid">
+            <section class="glass-panel controls-section">
+                <!-- Generate Mode Controls -->
+                <div id="generateControls">
+                    <div class="control-group">
+                        <h3>Item Sampling</h3>
+                        <div class="input-row">
+                            <div class="input-field">
+                                <label for="knownObjects">Known Objects</label>
+                                <input type="number" id="knownObjects" value="2" min="0" max="10">
+                            </div>
+                            <div class="input-field">
+                                <label for="unknownObjects">Unknown Objects</label>
+                                <input type="number" id="unknownObjects" value="4" min="2" max="12">
+                            </div>
+                        </div>
+                        <div class="input-row">
+                            <div class="input-field">
+                                <label for="knownBoxes">Known Boxes</label>
+                                <input type="number" id="knownBoxes" value="1" min="1" max="3">
+                            </div>
+                            <div class="input-field">
+                                <label for="unknownBoxes">Unknown Boxes</label>
+                                <input type="number" id="unknownBoxes" value="1" min="1" max="3">
+                            </div>
+                        </div>
+                        <div class="input-field">
+                            <label for="obstaclesCount">Obstacles</label>
+                            <input type="number" id="obstaclesCount" value="3" min="0" max="5">
+                        </div>
+                    </div>
+
+                    <div class="control-group">
+                        <h3>Environment</h3>
+                        <div class="checkbox-field">
+                            <label class="switch">
+                                <input type="checkbox" id="transformWorkspace" checked>
+                                <span class="slider round"></span>
+                            </label>
+                            <label for="transformWorkspace" style="cursor:pointer">Apply Global Transform</label>
+                        </div>
+                        <div class="input-field mt-10">
+                            <label for="seedInput">Seed (Optional)</label>
+                            <input type="number" id="seedInput" placeholder="Auto-generate">
+                        </div>
+                    </div>
+
+                    <div class="actions">
+                        <button id="generateBtn" class="primary-btn">Generate New Task</button>
+                    </div>
+                </div>
+
+                <!-- Shared Exports (Visually consistent) -->
+                <div class="downloads-section hidden" id="downloads">
+                    <h3>Export & Save</h3>
+                    <div class="download-btns">
+                        <button id="btnDLWorkspace" onclick="downloadCSV('workspace')"
+                            class="secondary-btn">Workspace</button>
+                        <button id="btnDLMap" onclick="downloadCSV('map')" class="secondary-btn">Map</button>
+                        <button id="btnDLGT" onclick="downloadCSV('map_gt')" class="secondary-btn">Ground Truth</button>
+                    </div>
+                    <button onclick="downloadAllCSV()" class="primary-btn" style="width:100%;margin-top:0.5rem">Save
+                        All</button>
+                </div>
+
+                <!-- Evaluate Mode Controls -->
+                <div id="evaluateControls" class="hidden">
+                    <div class="eval-method-switch">
+                        <button class="eval-method-btn active" data-method="seed">Single File</button>
+                        <button class="eval-method-btn" data-method="files">4-File</button>
+                    </div>
+
+                    <div id="evalBySeed" class="control-group">
+                        <div class="input-field">
+                            <label>Solution Map (solution_*.csv)</label>
+                            <input type="file" id="seedSolutionFile" accept=".csv">
+                        </div>
+                        <div class="input-field">
+                            <label for="evalSeedInput">Seed</label>
+                            <input type="text" id="evalSeedInput" placeholder="Auto-extracted from filename">
+                        </div>
+                        <button id="runSeedEvalBtn" class="primary-btn mt-10" style="width:100%">Evaluate</button>
+                    </div>
+
+                    <div id="evalByFiles" class="control-group hidden">
+                        <div class="file-stack">
+                            <div class="input-field">
+                                <label>Workspace (workspace_*.csv)</label>
+                                <input type="file" id="workspaceFile" accept=".csv">
+                            </div>
+                            <div class="input-field">
+                                <label>Map (map_*.csv)</label>
+                                <input type="file" id="mapFile" accept=".csv">
+                            </div>
+                            <div class="input-field">
+                                <label>Ground Truth (gt_*.csv)</label>
+                                <input type="file" id="completeFile" accept=".csv">
+                            </div>
+                            <div class="input-field">
+                                <label>Solution (solution_*.csv)</label>
+                                <input type="file" id="solutionFile" accept=".csv">
+                            </div>
+                        </div>
+                        <div class="actions">
+                            <button id="runEvalBtn" class="primary-btn">Evaluate</button>
+                        </div>
+                    </div>
+
+                    <div id="evaluationResults" class="eval-results-container hidden">
+                        <!-- Results generated by script.js -->
+                    </div>
+                </div>
+            </section>
+
+            <section class="glass-panel visualization-section">
+                <div class="tabs-row">
+                    <div class="tabs">
+                        <button class="tab-btn active" data-tab="truth">Ground Truth</button>
+                        <button class="tab-btn" data-tab="known">Known</button>
+                        <button class="tab-btn" data-tab="placement">Placement Guide</button>
+                    </div>
+                    <div class="tabs-row-end">
+                        <button onclick="downloadSVG()" class="small-btn hidden" id="btnDLSVG">SVG</button>
+                        <span class="tab-seed-badge hidden" id="tabSeedBadge">
+                            Seed: <strong id="displaySeed">-</strong>
+                            <button id="copySeedBtn" class="small-btn">Copy</button>
+                        </span>
+                    </div>
+                </div>
+                <div class="canvas-container">
+                    <canvas id="mapCanvas"></canvas>
+                    <div id="mapTooltip" class="map-tooltip hidden"></div>
+                </div>
+                <div class="legend" id="legend">
+                    <!-- Legend generated by script.js -->
+                </div>
+            </section>
+        </div>
+    </main>
+
+    <script src="script.js"></script>
+</body>
+
+</html>
