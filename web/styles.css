@@ -790,6 +790,77 @@ input:checked+.slider:before {
     border-color: var(--accent-primary);
 }
 
+/* Hint text */
+.hint-text {
+    font-size: 0.8rem;
+    line-height: 1.55;
+    color: var(--text-secondary);
+    margin: 0 0 0.75rem;
+    padding: 0.6rem 0.75rem;
+    background: var(--ui-input-bg);
+    border-left: 3px solid var(--accent-primary);
+    border-radius: 0 6px 6px 0;
+}
+
+.hint-text code {
+    font-family: 'Courier New', monospace;
+    font-size: 0.78rem;
+    color: var(--accent-primary);
+    background: var(--accent-glow);
+    padding: 0.05em 0.3em;
+    border-radius: 3px;
+}
+
+/* Info tooltip */
+.info-tip {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    vertical-align: middle;
+    margin-left: 0.3rem;
+    cursor: default;
+}
+
+.info-tip svg {
+    width: 0.95rem;
+    height: 0.95rem;
+    color: var(--text-secondary);
+    transition: color 0.15s;
+}
+
+.info-tip:hover svg,
+.info-tip:focus svg {
+    color: var(--accent-primary);
+}
+
+.info-tip .tip-content {
+    display: none;
+    position: absolute;
+    left: 50%;
+    top: calc(100% + 10px);
+    transform: translateX(-50%);
+    width: 260px;
+    background: var(--bg-secondary, var(--bg-color));
+    border: 1px solid var(--ui-border-prominent);
+    border-radius: 10px;
+    padding: 0.75rem 1rem;
+    font-size: 0.82rem;
+    font-weight: normal;
+    line-height: 1.55;
+    color: var(--text-secondary);
+    text-align: left;
+    z-index: 200;
+    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.18);
+    pointer-events: none;
+    white-space: normal;
+}
+
+.info-tip:hover .tip-content,
+.info-tip:focus .tip-content {
+    display: block;
+}
+
 .divider {
     text-align: center;
     color: var(--text-secondary);
