@@ -60,9 +60,28 @@ let evalData = null; // Evaluation data (workspace, gt, solution)
 let evaluationResult = null;
 let currentView = 'truth'; // Canvas view filter
 let hoverItem = null;
+let panelHoverItem = null; // Item hovered in results panel (highlights on canvas)
 let hoverMouse = { x: 0, y: 0 }; // Mouse position relative to canvas element (CSS px)
 const layerVisible = {}; // false = hidden, undefined/true = visible
 const vis = (key) => layerVisible[key] !== false;
+
+function getThreshold() { return Math.max(0, parseInt(document.getElementById('evalThreshold')?.value) || 20); }
+
+function getHoverNearestDist(item) {
+    if (!evaluationResult || !evalData) return null;
+    const ref = item._ref || item;
+    const dist2 = (a, b) => Math.sqrt((a.x - b.x) ** 2 + (a.y - b.y) ** 2);
+    if (item._label?.startsWith('Missing')) {
+        const matchedSols = new Set(evaluationResult.matches.map(m => m.sol));
+        const ds = evalData.solution.filter(s => !matchedSols.has(s)).map(s => dist2(ref, s));
+        return ds.length ? Math.min(...ds) : null;
+    } else if (item._label?.startsWith('Penalty')) {
+        const matchedGTs = new Set(evaluationResult.matches.map(m => m.gt));
+        const ds = [...evalData.gt.known, ...evalData.gt.unknown].filter(g => !matchedGTs.has(g)).map(g => dist2(ref, g));
+        return ds.length ? Math.min(...ds) : null;
+    }
+    return null;
+}
 
 // --- CSS COLOR RESOLVER ---
 // getPropertyValue() on custom properties returns the raw token string (e.g. "light-dark(...)"),
@@ -157,7 +176,7 @@ function parseCSV(text) {
 function makeRot90(workspace) {
     const xs = workspace.map(p => p.x), ys = workspace.map(p => p.y);
     const rot = (Math.max(...xs) - Math.min(...xs)) > (Math.max(...ys) - Math.min(...ys));
-    const r90  = i => rot ? { ...i, x: -i.y, y: i.x, ...(i.angle != null ? { angle: i.angle + 90 } : {}) } : i;
+    const r90 = i => rot ? { ...i, x: -i.y, y: i.x, ...(i.angle != null ? { angle: i.angle + 90 } : {}) } : i;
     const r90p = p => rot ? { x: -p.y, y: p.x } : p;
     return { r90, r90p };
 }
@@ -243,31 +262,36 @@ function updateThemeIcon(theme) {
 
 function switchMode(mode) {
     currentMode = mode;
+    panelHoverItem = null;
     document.querySelectorAll('.mode-btn').forEach(btn => btn.classList.toggle('active', btn.dataset.mode === mode));
     document.getElementById('generateControls').classList.toggle('hidden', mode !== 'generate');
     document.getElementById('evaluateControls').classList.toggle('hidden', mode !== 'evaluate');
 
     // Update tabs and canvas state
-    const tabs = document.querySelectorAll('.tab-btn');
+    const tabsEl = document.querySelector('.tabs');
     const tabSeedBadge = document.getElementById('tabSeedBadge');
     if (mode === 'generate') {
+        tabsEl.classList.remove('hidden');
+        const tabs = document.querySelectorAll('.tab-btn[data-tab]');
         tabs[0].textContent = 'Ground Truth'; tabs[0].dataset.tab = 'truth';
         tabs[1].textContent = 'Known'; tabs[1].dataset.tab = 'known';
         tabs[2].textContent = 'Placement Guide'; tabs[2].dataset.tab = 'placement';
-        if (currentView === 'evaluation' || currentView === 'solution') currentView = 'truth';
+        if (currentView === 'all') currentView = 'truth';
         document.getElementById('downloads').classList.toggle('hidden', !currentTask);
         ['btnDLWorkspace', 'btnDLMap', 'btnDLGT'].forEach(id => document.getElementById(id).style.display = 'inline-block');
         tabSeedBadge.classList.toggle('hidden', !currentTask);
+        tabs.forEach(t => t.classList.toggle('active', t.dataset.tab === currentView));
     } else {
-        tabs[0].textContent = 'Side-by-Side Compare'; tabs[0].dataset.tab = 'evaluation';
-        tabs[1].textContent = 'Ground Truth'; tabs[1].dataset.tab = 'truth';
-        tabs[2].textContent = 'Your Solution'; tabs[2].dataset.tab = 'solution';
-        if (currentView === 'known' || currentView === 'placement' || currentView === 'truth') currentView = 'evaluation';
+        tabsEl.classList.add('hidden');
+        currentView = 'all';
         document.getElementById('downloads').classList.add('hidden');
         ['btnDLWorkspace', 'btnDLMap', 'btnDLGT'].forEach(id => document.getElementById(id).style.display = 'none');
         tabSeedBadge.classList.add('hidden');
+        // Reset single-file seed UI
+        document.getElementById('seedExtracted')?.classList.add('hidden');
+        document.getElementById('seedManualEntry')?.classList.add('hidden');
+        switchEvalSidebarTab('input');
     }
-    tabs.forEach(t => t.classList.toggle('active', t.dataset.tab === currentView));
     draw();
 }
 
@@ -299,7 +323,15 @@ function generateTask() {
 
     currentTask = recreateTask(params.nkO, params.nuO, params.nkB, params.nuB, params.nObs, !!params.doTrans);
     document.getElementById('downloads').classList.remove('hidden');
+    updateSaveTooltips();
     draw();
+}
+
+function updateSaveTooltips() {
+    const seed = currentTask ? csvSeedStr() : null;
+    document.querySelectorAll('.sbt-file[data-suffix]').forEach(el => {
+        el.textContent = seed ? seed + el.dataset.suffix : '*' + el.dataset.suffix;
+    });
 }
 
 /** Recreates task data given parameters and an active PRNG */
@@ -363,13 +395,14 @@ async function runEvaluation() {
     const allItems = data.comp.filter(i => i.Type === 'O' || i.Type === 'B');
     const ws = data.ws;
     const { r90, r90p } = makeRot90(ws);
+    const withCsv = item => { const r = r90(item); r._csvX = item.x; r._csvY = item.y; return r; };
     const gt = {
-        known:    allItems.filter(i =>  knownKeys.has(`${i.Type},${i.x},${i.y}`)).map(r90),
-        unknown:  allItems.filter(i => !knownKeys.has(`${i.Type},${i.x},${i.y}`)).map(r90),
+        known: allItems.filter(i => knownKeys.has(`${i.Type},${i.x},${i.y}`)).map(withCsv),
+        unknown: allItems.filter(i => !knownKeys.has(`${i.Type},${i.x},${i.y}`)).map(withCsv),
         obstacles: data.comp.filter(i => i.Type === 'P').map(r90p),
         start: r90(data.comp.find(i => i.Type === 'S'))
     };
-    performEvaluation(ws.map(r90p), gt, data.sol.filter(i => i.Type === 'O' || i.Type === 'B').map(r90));
+    performEvaluation(ws.map(r90p), gt, data.sol.filter(i => i.Type === 'O' || i.Type === 'B').map(withCsv));
 }
 
 async function runSeedEvaluation() {
@@ -413,26 +446,44 @@ async function runSeedEvaluation() {
     };
     // 90° CCW rotation so longest side is always Y-axis
     const { r90, r90p } = makeRot90(b.workspace);
+    // GT "CSV coords" = base coords after the global workspace transform (= what's in {seed}_gt.csv)
+    const toGTCsv = item => {
+        const rp = rotatePoint(item.x, item.y, angleRad);
+        return { x: rp.x + translate.x, y: rp.y + translate.y };
+    };
+    const withGTCsv = (raw, Type) => {
+        const item = r90({ ...raw, Type });
+        const csv = toGTCsv(raw);
+        item._csvX = csv.x; item._csvY = csv.y;
+        return item;
+    };
     const gt = {
-        known:   [...b.knownObjs.map(o => r90({ ...o, Type: 'O' })),   ...b.knownBoxes.map(bx => r90({ ...bx, Type: 'B' }))],
-        unknown: [...b.unknownObjs.map(o => r90({ ...o, Type: 'O' })), ...b.unknownBoxes.map(bx => r90({ ...bx, Type: 'B' }))],
+        known: [...b.knownObjs.map(o => withGTCsv(o, 'O')), ...b.knownBoxes.map(bx => withGTCsv(bx, 'B'))],
+        unknown: [...b.unknownObjs.map(o => withGTCsv(o, 'O')), ...b.unknownBoxes.map(bx => withGTCsv(bx, 'B'))],
         obstacles: b.obstacles.map(r90p),
         start: r90(b.startPose)
     };
-    performEvaluation(b.workspace.map(r90p), gt, solData.map(invTransform).map(r90));
+    // Solution "CSV coords" = raw values from the uploaded file (before invTransform and r90)
+    const solItems = solData.map(item => {
+        const result = r90(invTransform(item));
+        result._csvX = item.x; result._csvY = item.y;
+        return result;
+    });
+    performEvaluation(b.workspace.map(r90p), gt, solItems);
 }
 
 function performEvaluation(workspace, gt, solution) {
     const solItems = solution;
+    const thresh = getThreshold();
     const matchType = (type, gtL) => {
         const solL = solItems.filter(i => i.Type === type);
         if (!gtL.length || !solL.length) return [];
         const matrix = gtL.map(g => solL.map(s => {
             const d = Math.sqrt((g.x - s.x) ** 2 + (g.y - s.y) ** 2);
-            return d > 20 ? 200 : d;
+            return d > thresh ? thresh * 10 : d;
         }));
         return hungarianAlgorithm(matrix).map(([gi, si]) => ({ gt: gtL[gi], sol: solL[si], dist: Math.sqrt((gtL[gi].x - solL[si].x) ** 2 + (gtL[gi].y - solL[si].y) ** 2) }))
-            .filter(m => m.dist < 20);
+            .filter(m => m.dist <= thresh);
     };
 
     const matches = [...matchType('O', gt.known.filter(i => i.Type === 'O').concat(gt.unknown.filter(i => i.Type === 'O'))),
@@ -450,6 +501,7 @@ function performEvaluation(workspace, gt, solution) {
     };
 
     displayResults();
+    switchEvalSidebarTab('results');
     draw();
 }
 
@@ -457,14 +509,161 @@ function displayResults() {
     const resDiv = document.getElementById('evaluationResults');
     const s = evaluationResult.stats;
     resDiv.classList.remove('hidden');
-    const perfect = s.knownMatched === s.knownTotal && s.unknownMatched === s.unknownTotal && s.penalties === 0;
+
+    const allFound = s.knownMatched === s.knownTotal && s.unknownMatched === s.unknownTotal;
+    const perfect = allFound && s.penalties === 0;
+
+    const mntClass = s.knownMatched === s.knownTotal ? 'stat-success' : (s.knownMatched > 0 ? 'stat-warning' : 'stat-danger');
+    const dscClass = s.unknownMatched === s.unknownTotal ? 'stat-success' : (s.unknownMatched > 0 ? 'stat-warning' : 'stat-danger');
+    const penClass = s.penalties === 0 ? 'stat-success' : 'stat-danger';
+
+    let verdictClass, verdictIcon, verdictText;
+    if (perfect) {
+        verdictClass = 'verdict-perfect'; verdictIcon = '✓'; verdictText = 'PERFECT SCORE';
+    } else if (!allFound) {
+        verdictClass = 'verdict-incomplete'; verdictIcon = '✗'; verdictText = 'INCOMPLETE TASK';
+    } else {
+        verdictClass = 'verdict-penalty'; verdictIcon = '!'; verdictText = 'ALL FOUND — WITH PENALTIES';
+    }
+
     resDiv.innerHTML = `
-        <div class="stat-card"><div class="stat-label">Maintained</div><div class="stat-value">${s.knownMatched}/${s.knownTotal}</div></div>
-        <div class="stat-card"><div class="stat-label">Discovered</div><div class="stat-value">${s.unknownMatched}/${s.unknownTotal}</div></div>
-        <div class="stat-card"><div class="stat-label">Penalties</div><div class="stat-value">${s.penalties}</div></div>
-        <div class="stat-card"><div class="stat-label">Avg Error</div><div class="stat-value">${s.avgError.toFixed(1)} cm</div></div>
-        <div class="verdict-box ${perfect ? 'verdict-perfect' : 'verdict-incomplete'}">${perfect ? 'PERFECT SCORE!' : (s.knownMatched < s.knownTotal || s.unknownMatched < s.unknownTotal ? 'INCOMPLETE TASK' : 'ALL ITEMS FOUND (WITH PENALTIES)')}</div>
+        <div class="eval-stats-grid">
+            <div class="stat-card ${mntClass}">
+                <div class="stat-label">Maintained</div>
+                <div class="stat-fraction"><span class="stat-value">${s.knownMatched}</span><span class="stat-total">/${s.knownTotal}</span></div>
+            </div>
+            <div class="stat-card ${dscClass}">
+                <div class="stat-label">Discovered</div>
+                <div class="stat-fraction"><span class="stat-value">${s.unknownMatched}</span><span class="stat-total">/${s.unknownTotal}</span></div>
+            </div>
+            <div class="stat-card ${penClass}">
+                <div class="stat-label">Penalties</div>
+                <div class="stat-fraction"><span class="stat-value">${s.penalties}</span></div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label">Avg Error</div>
+                <div class="stat-fraction"><span class="stat-value">${s.avgError.toFixed(1)}</span><span class="stat-total"> cm</span></div>
+            </div>
+        </div>
+        <div class="verdict-box ${verdictClass}">${verdictIcon} ${verdictText}</div>
     `;
+}
+
+function buildResultsPanel() {
+    const container = document.getElementById('evalDetailedResults');
+    if (!container) return;
+    if (!evaluationResult || !evalData) {
+        container.innerHTML = `<div class="eval-detail-empty">Run an evaluation first.</div>`;
+        return;
+    }
+
+    const getC = resolveCSSColor;
+    const matchKnownColor = getC('--viz-match-known');
+    const matchUnknownColor = getC('--viz-match-unknown');
+    const missingColorStr = getC('--viz-missing');
+    const penaltyColorStr = getC('--viz-penalty');
+
+    const knownGTSet = new Set(evalData.gt.known);
+    const matchedGTSet = new Set(evaluationResult.matches.map(m => m.gt));
+    const matchedSolSet = new Set(evaluationResult.matches.map(m => m.sol));
+
+    // Build sections
+    const maintainedMatches = evaluationResult.matches.filter(m => knownGTSet.has(m.gt)).sort((a, b) => a.dist - b.dist);
+    const discoveredMatches = evaluationResult.matches.filter(m => !knownGTSet.has(m.gt)).sort((a, b) => a.dist - b.dist);
+    const missingItems = [...evalData.gt.known, ...evalData.gt.unknown].filter(i => !matchedGTSet.has(i));
+    const penaltyItems = evalData.solution.filter(i => !matchedSolSet.has(i));
+
+    // Compute nearest dist for missing/penalty for sorting
+    const dist2 = (a, b) => Math.sqrt((a.x - b.x) ** 2 + (a.y - b.y) ** 2);
+    const nearestForMissing = (item) => {
+        const ds = penaltyItems.map(s => dist2(item, s));
+        return ds.length ? Math.min(...ds) : null;
+    };
+    const nearestForPenalty = (item) => {
+        const ds = missingItems.map(g => dist2(item, g));
+        return ds.length ? Math.min(...ds) : null;
+    };
+
+    missingItems.sort((a, b) => (nearestForMissing(a) ?? Infinity) - (nearestForMissing(b) ?? Infinity));
+    penaltyItems.sort((a, b) => (nearestForPenalty(a) ?? Infinity) - (nearestForPenalty(b) ?? Infinity));
+
+    let html = '';
+
+    const makeSection = (title, color, items, makeRow) => {
+        if (!items.length) return;
+        html += `<div class="eval-detail-section">`;
+        html += `<div class="eval-detail-section-header"><div class="eval-detail-section-dot" style="background:${color}"></div>${title} (${items.length})</div>`;
+        items.forEach((item, idx) => { html += makeRow(item, idx); });
+        html += `</div>`;
+    };
+
+    const csvXY = (item) => `${(item._csvX ?? item.x).toFixed(0)}, ${(item._csvY ?? item.y).toFixed(0)}`;
+
+    const matchRow = (m, color, side) => {
+        const item = side === 'gt' ? m.gt : m.sol;
+        const typeLabel = item.Type === 'B' ? 'Box' : 'Obj';
+        return `<div class="eval-detail-row" data-match-idx="${evaluationResult.matches.indexOf(m)}" data-row-type="match">
+            <span class="eval-detail-type">${typeLabel}</span>
+            <span class="eval-detail-coords">${csvXY(item)}</span>
+            <span class="eval-detail-error" style="color:${color}">${m.dist.toFixed(1)} cm</span>
+        </div>`;
+    };
+
+    const unmatchedRow = (item, idx, color, rowType, nearestDist) => {
+        const typeLabel = item.Type === 'B' ? 'Box' : 'Obj';
+        const errStr = nearestDist !== null ? `${nearestDist.toFixed(1)} cm` : '—';
+        return `<div class="eval-detail-row" data-item-idx="${idx}" data-row-type="${rowType}">
+            <span class="eval-detail-type">${typeLabel}</span>
+            <span class="eval-detail-coords">${csvXY(item)}</span>
+            <span class="eval-detail-error" style="color:${color}">${errStr}</span>
+        </div>`;
+    };
+
+    makeSection('Maintained', matchKnownColor, maintainedMatches, (m) => matchRow(m, matchKnownColor, 'gt'));
+    makeSection('Discovered', matchUnknownColor, discoveredMatches, (m) => matchRow(m, matchUnknownColor, 'gt'));
+    makeSection('Missing', missingColorStr, missingItems, (item, i) => unmatchedRow(item, i, missingColorStr, 'missing', nearestForMissing(item)));
+    makeSection('Penalty', penaltyColorStr, penaltyItems, (item, i) => unmatchedRow(item, i, penaltyColorStr, 'penalty', nearestForPenalty(item)));
+
+    if (!html) html = `<div class="eval-detail-empty">No items to show.</div>`;
+    container.innerHTML = html;
+
+    // Attach hover listeners
+    container.querySelectorAll('.eval-detail-row').forEach(row => {
+        const rowType = row.dataset.rowType;
+        let item = null;
+
+        if (rowType === 'match') {
+            const m = evaluationResult.matches[parseInt(row.dataset.matchIdx)];
+            if (m) item = { _isMatch: true, _matchRef: m, _label: 'Match', x: m.gt.x, y: m.gt.y };
+        } else if (rowType === 'missing') {
+            const i = parseInt(row.dataset.itemIdx);
+            const raw = missingItems[i];
+            if (raw) item = { ...raw, _ref: raw, _label: `Missing ${raw.Type === 'B' ? 'Box' : 'Object'}`, _side: 'left' };
+        } else if (rowType === 'penalty') {
+            const i = parseInt(row.dataset.itemIdx);
+            const raw = penaltyItems[i];
+            if (raw) item = { ...raw, _ref: raw, _label: `Penalty ${raw.Type === 'B' ? 'Box' : 'Object'}`, _side: 'right' };
+        }
+
+        row.addEventListener('mouseenter', () => {
+            panelHoverItem = item;
+            container.querySelectorAll('.eval-detail-row').forEach(r => r.classList.remove('panel-hover-active'));
+            row.classList.add('panel-hover-active');
+            draw();
+        });
+        row.addEventListener('mouseleave', () => {
+            panelHoverItem = null;
+            row.classList.remove('panel-hover-active');
+            draw();
+        });
+    });
+}
+
+function switchEvalSidebarTab(panel) {
+    document.querySelectorAll('.eval-sidebar-tab').forEach(t => t.classList.toggle('active', t.dataset.panel === panel));
+    document.getElementById('evalInputPanel').classList.toggle('hidden', panel !== 'input');
+    document.getElementById('evalResultsPanel').classList.toggle('hidden', panel !== 'results');
+    if (panel === 'results') buildResultsPanel();
 }
 
 // --- CANVAS ---
@@ -475,10 +674,15 @@ function draw() {
     const btnSave = document.getElementById('btnDLSVG');
     btnSave.classList.add('hidden');
 
-    // Fit canvas to container
+    // Fit canvas to container, scaled for device pixel ratio (sharp on HiDPI)
     const rect = container.getBoundingClientRect();
-    canvas.width = rect.width;
-    canvas.height = rect.height;
+    const dpr = window.devicePixelRatio || 1;
+    const W = rect.width, H = rect.height;
+    canvas.width = W * dpr;
+    canvas.height = H * dpr;
+    canvas.style.width = W + 'px';
+    canvas.style.height = H + 'px';
+    ctx.scale(dpr, dpr);
 
     const data = currentMode === 'generate' ? (currentTask ? (currentView === 'placement' ? currentTask.base : currentTask.transformed) : null) : evalData;
     if (!data) return;
@@ -497,6 +701,7 @@ function draw() {
     const matchKnown = getC('--viz-match-known');
     const matchUnknown = getC('--viz-match-unknown');
     const penaltyColor = getC('--viz-penalty');
+    const missingColor = getC('--viz-missing');
     const hoverColor = getC('--viz-hover');
     const axisColor = getC('--viz-axis');
     const unusedColor = getC('--viz-unused');
@@ -507,19 +712,19 @@ function draw() {
     const pad = 120;
     const dataW = maxX - minX + pad * 2, dataH = maxY - minY + pad * 2;
 
-    const isSplit = (currentMode === 'evaluate' && currentView === 'evaluation');
-    const viewWidth = isSplit ? canvas.width / 2 : canvas.width;
-    const scale = Math.min(viewWidth / dataW, canvas.height / dataH);
-    const offY = (canvas.height - dataH * scale) / 2;
+    const isSplit = (currentMode === 'evaluate');
+    const viewWidth = isSplit ? W / 2 : W;
+    const scale = Math.min(viewWidth / dataW, H / dataH);
+    const offY = (H - dataH * scale) / 2;
 
     const getToX = (isRight = false) => {
-        const offX = (viewWidth - dataW * scale) / 2 + (isRight ? canvas.width / 2 : 0);
+        const offX = (viewWidth - dataW * scale) / 2 + (isRight ? W / 2 : 0);
         return x => offX + (x - minX + pad) * scale;
     };
     const toY = y => offY + ((maxY - y) + pad) * scale;
     const toX = getToX(false); // Default toX for tooltips/single-view
 
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.clearRect(0, 0, W, H);
 
     const drawWorld = (toX, worldData, isGT = true) => {
         // Grid — uniform thin lines every 100 cm, labels every 500 cm
@@ -633,23 +838,23 @@ function draw() {
             if (isGT) {
                 if (evaluationResult) {
                     const matchedGT = new Set(evaluationResult.matches.map(m => m.gt));
-                    if (vis('maintained')) worldData.gt.known.filter(i =>   matchedGT.has(i)).forEach(i => drawItem(i, i.Type, matchKnown));
-                    if (vis('discovered')) worldData.gt.unknown.filter(i =>  matchedGT.has(i)).forEach(i => drawItem(i, i.Type, matchUnknown));
-                    if (vis('missing'))    [...worldData.gt.known, ...worldData.gt.unknown].filter(i => !matchedGT.has(i)).forEach(i => drawItem(i, i.Type, penaltyColor));
+                    if (vis('maintained')) worldData.gt.known.filter(i => matchedGT.has(i)).forEach(i => drawItem(i, i.Type, matchKnown));
+                    if (vis('discovered')) worldData.gt.unknown.filter(i => matchedGT.has(i)).forEach(i => drawItem(i, i.Type, matchUnknown));
+                    if (vis('missing')) [...worldData.gt.known, ...worldData.gt.unknown].filter(i => !matchedGT.has(i)).forEach(i => drawItem(i, i.Type, missingColor));
                 } else {
                     worldData.gt.known.forEach(i => drawItem(i, i.Type, matchKnown));
                     worldData.gt.unknown.forEach(i => drawItem(i, i.Type, matchUnknown));
                 }
-                if (vis('obstacle'))   worldData.gt.obstacles.forEach(o => drawItem(o, 'P', obstacleColor));
+                if (vis('obstacle')) worldData.gt.obstacles.forEach(o => drawItem(o, 'P', obstacleColor));
             } else {
                 if (evaluationResult) {
-                    const matchedByKnown   = new Set(evaluationResult.matches.filter(m =>  knownGT.has(m.gt)).map(m => m.sol));
+                    const matchedByKnown = new Set(evaluationResult.matches.filter(m => knownGT.has(m.gt)).map(m => m.sol));
                     const matchedByUnknown = new Set(evaluationResult.matches.filter(m => !knownGT.has(m.gt)).map(m => m.sol));
                     const matchedAll = new Set([...matchedByKnown, ...matchedByUnknown]);
                     const sol = worldData.solution;
-                    if (vis('maintained')) sol.filter(i =>  matchedByKnown.has(i)).forEach(i => drawItem(i, i.Type, matchKnown));
-                    if (vis('discovered')) sol.filter(i =>  matchedByUnknown.has(i)).forEach(i => drawItem(i, i.Type, matchUnknown));
-                    if (vis('penalty'))    sol.filter(i => !matchedAll.has(i)).forEach(i => drawItem(i, i.Type, penaltyColor));
+                    if (vis('maintained')) sol.filter(i => matchedByKnown.has(i)).forEach(i => drawItem(i, i.Type, matchKnown));
+                    if (vis('discovered')) sol.filter(i => matchedByUnknown.has(i)).forEach(i => drawItem(i, i.Type, matchUnknown));
+                    if (vis('penalty')) sol.filter(i => !matchedAll.has(i)).forEach(i => drawItem(i, i.Type, penaltyColor));
                 } else {
                     worldData.solution.forEach(i => drawItem(i, i.Type, objColor));
                 }
@@ -659,16 +864,16 @@ function draw() {
     };
 
     if (!isSplit) {
-        drawWorld(getToX(false), data, currentView !== 'solution');
+        drawWorld(getToX(false), data, currentView !== 'sol');
     } else {
         // Divider
         ctx.strokeStyle = borderProminent; ctx.lineWidth = 1;
-        ctx.beginPath(); ctx.moveTo(canvas.width / 2, 0); ctx.lineTo(canvas.width / 2, canvas.height); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(W / 2, 0); ctx.lineTo(W / 2, H); ctx.stroke();
 
         // Labels
         ctx.fillStyle = textColor; ctx.font = 'bold 16px Inter'; ctx.textAlign = 'center';
-        ctx.fillText('GROUND TRUTH', canvas.width / 4, 30);
-        ctx.fillText('YOUR SOLUTION', 3 * canvas.width / 4, 30);
+        ctx.fillText('GROUND TRUTH', W / 4, 30);
+        ctx.fillText('SOLUTION', 3 * W / 4, 30);
 
         const toXLeft = getToX(false);
         const toXRight = getToX(true);
@@ -679,8 +884,8 @@ function draw() {
             const knownGTSet = new Set(data.gt.known);
             evaluationResult.matches.forEach(m => {
                 const isMaintained = knownGTSet.has(m.gt);
-                if (isMaintained && !vis('maintained')) return;
-                if (!isMaintained && !vis('discovered')) return;
+                if (isMaintained && (!vis('maintained') || !vis('matched_maintained'))) return;
+                if (!isMaintained && (!vis('discovered') || !vis('matched_discovered'))) return;
                 const isHovered = hoverItem && hoverItem._isMatch && hoverItem._matchRef === m;
                 ctx.strokeStyle = isMaintained ? matchKnown : matchUnknown;
                 ctx.setLineDash([5, 5]); ctx.lineWidth = isHovered ? 2.5 : 1; ctx.globalAlpha = isHovered ? 1 : 0.6;
@@ -690,7 +895,10 @@ function draw() {
         }
     }
 
-    if (hoverItem) {
+    const activeHighlight = hoverItem || panelHoverItem;
+    if (activeHighlight) {
+        const hoverItem = activeHighlight; // shadow for the block below
+        const threshR = getThreshold() * scale;
         ctx.strokeStyle = hoverColor; ctx.lineWidth = 2;
         if (hoverItem._isMatch) {
             const m = hoverItem._matchRef;
@@ -704,14 +912,52 @@ function draw() {
                     ctx.globalAlpha = 0.8; ctx.fillRect(-12 * scale, -8 * scale, 24 * scale, 16 * scale);
                     ctx.restore(); ctx.globalAlpha = 1;
                 }
-                ctx.strokeStyle = hoverColor; ctx.beginPath(); ctx.arc(fn(item.x), toY(item.y), 16, 0, Math.PI * 2); ctx.stroke();
+                ctx.strokeStyle = hoverColor; ctx.beginPath(); ctx.arc(fn(item.x), toY(item.y), threshR, 0, Math.PI * 2); ctx.stroke();
             };
             highlightItem(m.gt, getToX(false));
             highlightItem(m.sol, getToX(true));
         } else {
             const hy = toY(hoverItem.y);
-            const ringFns = isSplit ? [toX, getToX(true)] : [toX];
-            ringFns.forEach(fn => { ctx.beginPath(); ctx.arc(fn(hoverItem.x), hy, 16, 0, Math.PI * 2); ctx.stroke(); });
+            const nearestDist = getHoverNearestDist(hoverItem);
+            const isMissing = hoverItem._label?.startsWith('Missing');
+            const isPenalty = hoverItem._label?.startsWith('Penalty');
+            const errorCircleColor = isMissing ? missingColor : (isPenalty ? penaltyColor : hoverColor);
+            if (isSplit && (hoverItem._side === 'left' || hoverItem._side === 'right')) {
+                // Primary ring on the item's own side
+                const primaryFn = hoverItem._side === 'left' ? getToX(false) : getToX(true);
+                ctx.strokeStyle = hoverColor; ctx.lineWidth = 2;
+                ctx.beginPath(); ctx.arc(primaryFn(hoverItem.x), hy, threshR, 0, Math.PI * 2); ctx.stroke();
+                // Draw a faded ring on the other side: at the matched item's position if matched, else same coordinate
+                const otherFn = hoverItem._side === 'left' ? getToX(true) : getToX(false);
+                let otherX = hoverItem.x, otherY = hoverItem.y;
+                if (evaluationResult) {
+                    const ref = hoverItem._ref || hoverItem;
+                    const match = hoverItem._side === 'left'
+                        ? evaluationResult.matches.find(m => m.gt === ref)
+                        : evaluationResult.matches.find(m => m.sol === ref);
+                    if (match) { const otherItem = hoverItem._side === 'left' ? match.sol : match.gt; otherX = otherItem.x; otherY = otherItem.y; }
+                }
+                ctx.globalAlpha = 0.35; ctx.setLineDash([4, 4]);
+                ctx.beginPath(); ctx.arc(otherFn(otherX), toY(otherY), threshR, 0, Math.PI * 2); ctx.stroke();
+                ctx.setLineDash([]); ctx.globalAlpha = 1;
+                // Error circle (nearest-unmatched dist) on both sides
+                if (nearestDist !== null) {
+                    ctx.strokeStyle = errorCircleColor; ctx.lineWidth = 1.5;
+                    ctx.globalAlpha = 0.8; ctx.setLineDash([3, 3]);
+                    ctx.beginPath(); ctx.arc(primaryFn(hoverItem.x), hy, nearestDist * scale, 0, Math.PI * 2); ctx.stroke();
+                    ctx.beginPath(); ctx.arc(otherFn(otherX), toY(otherY), nearestDist * scale, 0, Math.PI * 2); ctx.stroke();
+                    ctx.setLineDash([]); ctx.globalAlpha = 1;
+                }
+            } else {
+                const ringFns = isSplit ? [toX, getToX(true)] : [toX];
+                ringFns.forEach(fn => { ctx.beginPath(); ctx.arc(fn(hoverItem.x), hy, threshR, 0, Math.PI * 2); ctx.stroke(); });
+                if (nearestDist !== null) {
+                    ctx.strokeStyle = errorCircleColor; ctx.lineWidth = 1.5;
+                    ctx.globalAlpha = 0.8; ctx.setLineDash([3, 3]);
+                    ringFns.forEach(fn => { ctx.beginPath(); ctx.arc(fn(hoverItem.x), hy, nearestDist * scale, 0, Math.PI * 2); ctx.stroke(); });
+                    ctx.setLineDash([]); ctx.globalAlpha = 1;
+                }
+            }
         }
     }
     updateHoverTooltip();
@@ -736,19 +982,7 @@ function updateHoverTooltip() {
         const ref = hoverItem._ref || hoverItem;
         const match = evaluationResult?.matches?.find(m => m.gt === ref || m.sol === ref);
 
-        let nearestDist = null;
-        if (!match && evaluationResult && evalData) {
-            const dist2 = (a, b) => Math.sqrt((a.x - b.x) ** 2 + (a.y - b.y) ** 2);
-            if (hoverItem._label?.startsWith('Missing')) {
-                const matchedSols = new Set(evaluationResult.matches.map(m => m.sol));
-                const ds = evalData.solution.filter(s => !matchedSols.has(s)).map(s => dist2(ref, s));
-                if (ds.length) nearestDist = Math.min(...ds);
-            } else if (hoverItem._label?.startsWith('Penalty')) {
-                const matchedGTs = new Set(evaluationResult.matches.map(m => m.gt));
-                const ds = [...evalData.gt.known, ...evalData.gt.unknown].filter(g => !matchedGTs.has(g)).map(g => dist2(ref, g));
-                if (ds.length) nearestDist = Math.min(...ds);
-            }
-        }
+        const nearestDist = !match ? getHoverNearestDist(hoverItem) : null;
 
         el.innerHTML =
             `<div class="map-tooltip-label">${label}</div>` +
@@ -775,6 +1009,11 @@ function updateHoverTooltip() {
 function updateLegend() {
     const getC = resolveCSSColor;
     const L = document.getElementById('legend'); L.innerHTML = '';
+    const hint = document.createElement('div');
+    hint.className = 'legend-hint';
+    hint.title = 'Click any legend item to show or hide that category in the map';
+    hint.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg> Click items to show/hide';
+    L.appendChild(hint);
     const ws = { n: 'Workspace', key: 'workspace', c: getC('--viz-workspace') };
     const sp = { n: 'Start', key: 'start', c: getC('--viz-start') };
     const ko = { n: 'Known Object', key: 'known_obj', c: getC('--viz-obj') };
@@ -783,22 +1022,18 @@ function updateLegend() {
     const ub = { n: 'Unknown Box', key: 'unknown_box', c: getC('--viz-box'), h: true };
     const ob = { n: 'Obstacle', key: 'obstacle', c: getC('--viz-obstacle'), x: true };
     const un = { n: 'Unused', key: 'unused', c: getC('--viz-unused'), h: true };
-    const mnt  = { n: 'Maintained',       key: 'maintained', c: getC('--viz-match-known') };
-    const dsc  = { n: 'Discovered',       key: 'discovered', c: getC('--viz-match-unknown') };
-    const mis  = { n: 'Missing',          key: 'missing',    c: getC('--viz-penalty') };
-    const pen  = { n: 'Penalty',          key: 'penalty',    c: getC('--viz-penalty') };
-    const lmnt = { n: 'Maintained match', key: 'maintained', c: getC('--viz-match-known'),   d: true };
-    const ldsc = { n: 'Discovered match', key: 'discovered', c: getC('--viz-match-unknown'), d: true };
+    const mnt = { n: 'Maintained', key: 'maintained', c: getC('--viz-match-known') };
+    const dsc = { n: 'Discovered', key: 'discovered', c: getC('--viz-match-unknown') };
+    const mis = { n: 'Missing', key: 'missing', c: getC('--viz-missing') };
+    const pen = { n: 'Penalty', key: 'penalty', c: getC('--viz-penalty') };
+    const lmnt = { n: 'Maintained match', key: 'matched_maintained', c: getC('--viz-match-known'), d: true };
+    const ldsc = { n: 'Discovered match', key: 'matched_discovered', c: getC('--viz-match-unknown'), d: true };
 
     const items = currentMode === 'generate' ? {
         truth: [ws, sp, ko, kb, uo, ub, ob],
         known: [ws, sp, ko, kb],
         placement: [ws, sp, ko, kb, uo, ub, ob, un],
-    }[currentView] ?? [] : {
-        evaluation: [ws, sp, ob, mnt, lmnt, dsc, ldsc, mis, pen],
-        truth:      [ws, sp, ob, mnt, dsc, mis],
-        solution:   [ws, sp, ob, mnt, dsc, pen],
-    }[currentView] ?? [];
+    }[currentView] ?? [] : [ws, sp, ob, mnt, dsc, mis, pen, lmnt, ldsc];
     items.forEach(i => {
         const d = document.createElement('div');
         d.className = 'legend-item' + (vis(i.key) ? '' : ' layer-hidden');
@@ -814,6 +1049,70 @@ function updateLegend() {
 
 function downloadAllCSV() {
     ['workspace', 'map', 'map_gt'].forEach(type => downloadCSV(type));
+}
+
+function downloadAllSVGs() {
+    if (!currentTask) return;
+    const seed = csvSeedStr();
+    const views = [
+        { view: 'truth', name: 'gt' },
+        { view: 'known', name: 'known' },
+        { view: 'placement', name: 'placement_guide' },
+    ];
+    const savedView = currentView;
+    views.forEach(({ view, name }) => {
+        currentView = view;
+        const svgStr = _buildSVGString();
+        if (!svgStr) return;
+        const blob = new Blob([svgStr], { type: 'image/svg+xml' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a'); a.href = url; a.download = `${seed}_${name}.svg`; a.click();
+    });
+    currentView = savedView;
+    draw();
+}
+
+async function downloadZip() {
+    if (!currentTask || typeof window.JSZip === 'undefined') return;
+    const seed = csvSeedStr();
+    const zip = new window.JSZip();
+
+    // CSV files
+    const nameMap = { workspace: 'workspace', map: 'map', map_gt: 'gt' };
+    ['workspace', 'map', 'map_gt'].forEach(type => {
+        const data = currentTask.transformed;
+        let csv = type === 'workspace' ? "x,y\n" + data.workspace.map(p => `${p.x},${p.y}`).join("\n") : "Type,x,y,angle\n";
+        if (type !== 'workspace') {
+            csv += `S,${data.startPose.x},${data.startPose.y},${data.startPose.angle}\n`;
+            data.knownObjs.forEach(o => csv += `O,${o.x},${o.y},${o.angle}\n`);
+            data.knownBoxes.forEach(b => csv += `B,${b.x},${b.y},${b.angle}\n`);
+            if (type === 'map_gt') {
+                data.unknownObjs.forEach(o => csv += `O,${o.x},${o.y},${o.angle}\n`);
+                data.unknownBoxes.forEach(b => csv += `B,${b.x},${b.y},${b.angle}\n`);
+                data.obstacles.forEach(p => csv += `P,${p.x},${p.y},0\n`);
+            }
+        }
+        zip.file(`${seed}_${nameMap[type]}.csv`, csv);
+    });
+
+    // SVG files — temporarily switch view to generate each
+    const savedView = currentView;
+    const svgViews = [
+        { view: 'truth', name: 'gt' },
+        { view: 'known', name: 'known' },
+        { view: 'placement', name: 'placement_guide' },
+    ];
+    for (const { view, name } of svgViews) {
+        currentView = view;
+        const svgStr = _buildSVGString();
+        if (svgStr) zip.file(`${seed}_${name}.svg`, svgStr);
+    }
+    currentView = savedView;
+    draw(); // restore canvas
+
+    const blob = await zip.generateAsync({ type: 'blob' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a'); a.href = url; a.download = `${seed}.zip`; a.click();
 }
 
 function csvSeedStr() {
@@ -835,10 +1134,31 @@ function downloadCSV(type) {
     }
     const nameMap = { workspace: 'workspace', map: 'map', map_gt: 'gt' };
     const blob = new Blob([csv], { type: 'text/csv' }); const url = URL.createObjectURL(blob);
-    const a = document.createElement('a'); a.href = url; a.download = `${nameMap[type]}_${csvSeedStr()}.csv`; a.click();
+    const a = document.createElement('a'); a.href = url; a.download = `${csvSeedStr()}_${nameMap[type]}.csv`; a.click();
+}
+
+function generateSVGContent(viewOverride) {
+    const savedView = currentView;
+    if (viewOverride) currentView = viewOverride;
+    const svgString = _buildSVGString();
+    currentView = savedView;
+    return svgString;
 }
 
 function downloadSVG() {
+    const svgString = _buildSVGString();
+    if (!svgString) return;
+    const typeMap = { truth: 'gt', known: 'known', placement: 'placement', all: 'eval', gt: 'gt', sol: 'solution' };
+    const viewType = typeMap[currentView] || currentView;
+    const t = currentTask;
+    const fullSeed = t ? `${t.params.nkO}_${t.params.nuO}_${t.params.nkB}_${t.params.nuB}_${t.params.nObs}_${t.params.doTrans ? 1 : 0}_${t.seed}` : 'unknown';
+    const fileName = `${fullSeed}_${viewType}`;
+    const blob = new Blob([svgString], { type: 'image/svg+xml' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a'); a.href = url; a.download = `${fileName}.svg`; a.click();
+}
+
+function _buildSVGString() {
     const canvas = document.getElementById('mapCanvas');
     const data = currentMode === 'generate' ? (currentTask ? (currentView === 'placement' ? currentTask.base : currentTask.transformed) : null) : evalData;
     if (!data) return;
@@ -848,7 +1168,7 @@ function downloadSVG() {
     const obstacleColor = getC('--viz-obstacle'), wsColor = getC('--viz-workspace'), startColor = getC('--viz-start');
     const objColor = getC('--viz-obj'), boxColor = getC('--viz-box'), unusedColor = getC('--viz-unused');
     const borderProm = getC('--ui-border-prominent');
-    const matchKnown = getC('--viz-match-known'), matchUnknown = getC('--viz-match-unknown'), penaltyColor = getC('--viz-penalty');
+    const matchKnown = getC('--viz-match-known'), matchUnknown = getC('--viz-match-unknown'), penaltyColor = getC('--viz-penalty'), missingColor = getC('--viz-missing');
     const panelBg = getC('--bg-color'), panelText = getC('--text-primary'), panelSecondary = getC('--text-secondary'), accentColor = getC('--accent-primary');
     const successColor = getC('--success');
 
@@ -858,8 +1178,9 @@ function downloadSVG() {
     const pad = 120;
     const dataW = maxX - minX + pad * 2, dataH = maxY - minY + pad * 2;
 
-    const isSplit = (currentMode === 'evaluate' && currentView === 'evaluation');
-    const mapW = canvas.width, mapH = canvas.height;
+    const isSplit = (currentMode === 'evaluate');
+    const mapW = parseFloat(canvas.style.width) || canvas.offsetWidth;
+    const mapH = parseFloat(canvas.style.height) || canvas.offsetHeight;
     const viewWidth = isSplit ? mapW / 2 : mapW;
 
     const scale = Math.min(viewWidth / dataW, mapH / dataH);
@@ -867,20 +1188,26 @@ function downloadSVG() {
     const offY0 = (mapH - dataH * scale) / 2;
 
     // Map a world point to SVG canvas coordinates (matches canvas toX/toY exactly).
-    // xShift offsets the whole panel (used for split right panel).
+    // xShift offsets within the map area (used for split right panel). mapOffset shifts the map area itself.
     const map = (wx, wy, xShift = 0) => ({
-        cx: xShift + offX0 + (wx - minX + pad) * scale,
+        cx: mapOffset + xShift + offX0 + (wx - minX + pad) * scale,
         cy: offY0 + (maxY - wy + pad) * scale
     });
 
     const PANEL_W = 240;
-    const svgW = mapW + PANEL_W, svgH = mapH;
+    const LEFT_PANEL_W = (isSplit && evaluationResult) ? 240 : 0;
+    const mapOffset = LEFT_PANEL_W;
+    const svgW = mapOffset + mapW + PANEL_W, svgH = mapH;
 
     let svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${svgW}" height="${svgH}" viewBox="0 0 ${svgW} ${svgH}">`;
     svg += `<style>text { font-family: Inter, sans-serif; }</style>`;
-    svg += `<rect width="${mapW}" height="${svgH}" fill="${bg}" />`;
-    svg += `<rect x="${mapW}" y="0" width="${PANEL_W}" height="${svgH}" fill="${panelBg}" />`;
-    svg += `<line x1="${mapW}" y1="0" x2="${mapW}" y2="${svgH}" stroke="${borderProm}" stroke-width="1" />`;
+    if (LEFT_PANEL_W > 0) {
+        svg += `<rect x="0" y="0" width="${LEFT_PANEL_W}" height="${svgH}" fill="${panelBg}" />`;
+        svg += `<line x1="${LEFT_PANEL_W}" y1="0" x2="${LEFT_PANEL_W}" y2="${svgH}" stroke="${borderProm}" stroke-width="1" />`;
+    }
+    svg += `<rect x="${mapOffset}" y="0" width="${mapW}" height="${svgH}" fill="${bg}" />`;
+    svg += `<rect x="${mapOffset + mapW}" y="0" width="${PANEL_W}" height="${svgH}" fill="${panelBg}" />`;
+    svg += `<line x1="${mapOffset + mapW}" y1="0" x2="${mapOffset + mapW}" y2="${svgH}" stroke="${borderProm}" stroke-width="1" />`;
 
     const drawWorldSVG = (xShift, worldData, isGT = true) => {
         const fontSize = Math.max(9, Math.min(13, 11 * scale));
@@ -971,9 +1298,9 @@ function downloadSVG() {
             if (isGT) {
                 if (evaluationResult) {
                     const matchedGT = new Set(evaluationResult.matches.map(m => m.gt));
-                    if (vis('maintained')) worldData.gt.known.filter(i =>  matchedGT.has(i)).forEach(i => addIcon(i, i.Type, matchKnown));
+                    if (vis('maintained')) worldData.gt.known.filter(i => matchedGT.has(i)).forEach(i => addIcon(i, i.Type, matchKnown));
                     if (vis('discovered')) worldData.gt.unknown.filter(i => matchedGT.has(i)).forEach(i => addIcon(i, i.Type, matchUnknown));
-                    if (vis('missing'))    [...worldData.gt.known, ...worldData.gt.unknown].filter(i => !matchedGT.has(i)).forEach(i => addIcon(i, i.Type, penaltyColor));
+                    if (vis('missing')) [...worldData.gt.known, ...worldData.gt.unknown].filter(i => !matchedGT.has(i)).forEach(i => addIcon(i, i.Type, missingColor));
                 } else {
                     worldData.gt.known.forEach(i => addIcon(i, i.Type, matchKnown));
                     worldData.gt.unknown.forEach(i => addIcon(i, i.Type, matchUnknown));
@@ -981,13 +1308,13 @@ function downloadSVG() {
                 if (vis('obstacle')) worldData.gt.obstacles.forEach(o => addIcon(o, 'P', obstacleColor));
             } else {
                 if (evaluationResult) {
-                    const matchedByKnown   = new Set(evaluationResult.matches.filter(m =>  knownGT.has(m.gt)).map(m => m.sol));
+                    const matchedByKnown = new Set(evaluationResult.matches.filter(m => knownGT.has(m.gt)).map(m => m.sol));
                     const matchedByUnknown = new Set(evaluationResult.matches.filter(m => !knownGT.has(m.gt)).map(m => m.sol));
                     const matchedAll = new Set([...matchedByKnown, ...matchedByUnknown]);
                     const sol = worldData.solution;
-                    if (vis('maintained')) sol.filter(i =>  matchedByKnown.has(i)).forEach(i => addIcon(i, i.Type, matchKnown));
-                    if (vis('discovered')) sol.filter(i =>  matchedByUnknown.has(i)).forEach(i => addIcon(i, i.Type, matchUnknown));
-                    if (vis('penalty'))    sol.filter(i => !matchedAll.has(i)).forEach(i => addIcon(i, i.Type, penaltyColor));
+                    if (vis('maintained')) sol.filter(i => matchedByKnown.has(i)).forEach(i => addIcon(i, i.Type, matchKnown));
+                    if (vis('discovered')) sol.filter(i => matchedByUnknown.has(i)).forEach(i => addIcon(i, i.Type, matchUnknown));
+                    if (vis('penalty')) sol.filter(i => !matchedAll.has(i)).forEach(i => addIcon(i, i.Type, penaltyColor));
                 } else {
                     worldData.solution.forEach(i => addIcon(i, i.Type, objColor));
                 }
@@ -997,35 +1324,39 @@ function downloadSVG() {
     };
 
     if (!isSplit) {
-        drawWorldSVG(0, data, currentView !== 'solution');
+        drawWorldSVG(0, data, currentView !== 'sol');
     } else {
         const rightShift = mapW / 2;
-        svg += `<line x1="${rightShift}" y1="0" x2="${rightShift}" y2="${mapH}" stroke="${borderProm}" stroke-width="1" />`;
-        svg += `<text x="${rightShift / 2}" y="30" fill="${textColor}" font-size="16" font-weight="bold" text-anchor="middle">GROUND TRUTH</text>`;
-        svg += `<text x="${rightShift + rightShift / 2}" y="30" fill="${textColor}" font-size="16" font-weight="bold" text-anchor="middle">YOUR SOLUTION</text>`;
+        svg += `<line x1="${mapOffset + rightShift}" y1="0" x2="${mapOffset + rightShift}" y2="${mapH}" stroke="${borderProm}" stroke-width="1" />`;
+        svg += `<text x="${mapOffset + rightShift / 2}" y="30" fill="${textColor}" font-size="16" font-weight="bold" text-anchor="middle">GROUND TRUTH</text>`;
+        svg += `<text x="${mapOffset + rightShift + rightShift / 2}" y="30" fill="${textColor}" font-size="16" font-weight="bold" text-anchor="middle">SOLUTION</text>`;
         drawWorldSVG(0, data, true);
         drawWorldSVG(rightShift, data, false);
         if (evaluationResult) {
             const knownGTSet = new Set(data.gt.known);
             evaluationResult.matches.forEach(m => {
-                const color = knownGTSet.has(m.gt) ? matchKnown : matchUnknown;
+                const isMaintained = knownGTSet.has(m.gt);
+                if (isMaintained && (!vis('maintained') || !vis('matched_maintained'))) return;
+                if (!isMaintained && (!vis('discovered') || !vis('matched_discovered'))) return;
+                const color = isMaintained ? matchKnown : matchUnknown;
                 const gl = map(m.gt.x, m.gt.y, 0), sl = map(m.sol.x, m.sol.y, rightShift);
                 svg += `<line x1="${gl.cx}" y1="${gl.cy}" x2="${sl.cx}" y2="${sl.cy}" stroke="${color}" stroke-width="1" stroke-dasharray="5,5" opacity="0.6" />`;
             });
         }
     }
 
-    // --- Info Panel ---
-    const px = mapW + 18, lineH = 22;
+    // --- Info Panel (right) ---
+    const rPanelX = mapOffset + mapW;
+    const px = rPanelX + 18, lineH = 22;
     let py = 32;
 
     const svgText = (x, y, text, { fill = panelText, size = 12, weight = 'normal', anchor = 'start' } = {}) =>
         svg += `<text x="${x}" y="${y}" fill="${fill}" font-size="${size}" font-weight="${weight}" text-anchor="${anchor}">${text}</text>`;
     const svgRule = (y) =>
-        svg += `<line x1="${mapW + 10}" y1="${y}" x2="${mapW + PANEL_W - 10}" y2="${y}" stroke="${borderProm}" stroke-width="1" />`;
+        svg += `<line x1="${rPanelX + 10}" y1="${y}" x2="${rPanelX + PANEL_W - 10}" y2="${y}" stroke="${borderProm}" stroke-width="1" />`;
     const svgRow = (label, value, valueColor = panelText) => {
         svgText(px, py, label, { fill: panelSecondary, size: 11 });
-        svgText(mapW + PANEL_W - 12, py, value, { fill: valueColor, size: 11, anchor: 'end' });
+        svgText(rPanelX + PANEL_W - 12, py, value, { fill: valueColor, size: 11, anchor: 'end' });
         py += lineH;
     };
 
@@ -1037,6 +1368,7 @@ function downloadSVG() {
         const viewNames = { truth: 'Ground Truth', known: 'Known Items', placement: 'Placement Guide', evaluation: 'Side-by-Side', solution: 'Solution' };
         svgRow('View', viewNames[currentView] || currentView);
         svgRow('Seed', `${currentTask.seed}`);
+        svgRow('Full Seed', `${p.nkO}_${p.nuO}_${p.nkB}_${p.nuB}_${p.nObs}_${p.doTrans ? 1 : 0}_${currentTask.seed}`);
         py += 6; svgRule(py); py += 14;
         svgText(px, py, 'SETTINGS', { fill: accentColor, size: 10, weight: 'bold' }); py += 18;
         svgRow('Known Objects', `${p.nkO}`);
@@ -1094,31 +1426,106 @@ function downloadSVG() {
         if (currentView === 'placement') addLegendItem('Unused', unusedColor, 'filled');
     } else {
         addLegendItem('Obstacle', obstacleColor, 'cross');
-        if (currentView !== 'solution') {
+        if (currentView !== 'sol') {
             addLegendItem('Maintained', matchKnown, 'filled');
             addLegendItem('Discovered', matchUnknown, 'filled');
             addLegendItem('Missing', penaltyColor, 'filled');
         }
-        if (currentView !== 'truth') {
-            if (currentView === 'solution') {
+        if (currentView !== 'gt') {
+            if (currentView === 'sol') {
                 addLegendItem('Maintained', matchKnown, 'filled');
                 addLegendItem('Discovered', matchUnknown, 'filled');
             }
             addLegendItem('Penalty', penaltyColor, 'filled');
         }
-        if (currentView === 'evaluation') {
+        if (currentView === 'all') {
             addLegendItem('Maintained match', matchKnown, 'dashed');
             addLegendItem('Discovered match', matchUnknown, 'dashed');
         }
     }
 
+    // --- Left Results Panel (evaluate mode only) ---
+    if (LEFT_PANEL_W > 0 && evaluationResult && evalData) {
+        const lp = 12; // left padding
+        const lrx = LEFT_PANEL_W - lp; // right edge for right-aligned values
+        const lLineH = 18;
+        let lpy = 28;
+
+        const lpText = (x, y, text, { fill = panelText, size = 11, weight = 'normal', anchor = 'start' } = {}) =>
+            svg += `<text x="${x}" y="${y}" fill="${fill}" font-size="${size}" font-weight="${weight}" text-anchor="${anchor}">${text}</text>`;
+        const lpRule = (y) =>
+            svg += `<line x1="${lp}" y1="${y}" x2="${LEFT_PANEL_W - lp}" y2="${y}" stroke="${borderProm}" stroke-width="1" />`;
+
+        lpText(lp, lpy, 'ITEM RESULTS', { fill: accentColor, size: 10, weight: 'bold' }); lpy += 6;
+        lpRule(lpy); lpy += lLineH - 2;
+
+        const knownGTSetL = new Set(evalData.gt.known);
+        const matchedGTSetL = new Set(evaluationResult.matches.map(m => m.gt));
+        const matchedSolSetL = new Set(evaluationResult.matches.map(m => m.sol));
+        const dist2L = (a, b) => Math.sqrt((a.x - b.x) ** 2 + (a.y - b.y) ** 2);
+
+        const maintainedM = evaluationResult.matches.filter(m => knownGTSetL.has(m.gt)).sort((a, b) => a.dist - b.dist);
+        const discoveredM = evaluationResult.matches.filter(m => !knownGTSetL.has(m.gt)).sort((a, b) => a.dist - b.dist);
+        const missingL = [...evalData.gt.known, ...evalData.gt.unknown].filter(i => !matchedGTSetL.has(i));
+        const penaltyL = evalData.solution.filter(i => !matchedSolSetL.has(i));
+
+        const lpSection = (title, color, items, makeRow) => {
+            if (!items.length) return;
+            // Section header
+            svg += `<circle cx="${lp + 4}" cy="${lpy - 4}" r="4" fill="${color}" />`;
+            lpText(lp + 12, lpy, `${title} (${items.length})`, { fill: panelSecondary, size: 10, weight: 'bold' }); lpy += lLineH - 2;
+            lpRule(lpy - lLineH / 2 + 2); lpy += 2;
+            items.forEach(item => {
+                if (lpy > svgH - 10) return; // clip if out of space
+                makeRow(item);
+                lpy += lLineH;
+            });
+            lpy += 4;
+        };
+
+        const lpXY = (item) => `${(item._csvX ?? item.x).toFixed(0)}, ${(item._csvY ?? item.y).toFixed(0)}`;
+
+        lpSection('Maintained', matchKnown, maintainedM, (m) => {
+            const typeL = m.gt.Type === 'B' ? 'B' : 'O';
+            lpText(lp, lpy, typeL, { fill: matchKnown, size: 9, weight: 'bold' });
+            lpText(lp + 14, lpy, lpXY(m.gt), { size: 10 });
+            lpText(lrx, lpy, `${m.dist.toFixed(1)} cm`, { fill: matchKnown, size: 10, anchor: 'end' });
+        });
+
+        lpSection('Discovered', matchUnknown, discoveredM, (m) => {
+            const typeL = m.gt.Type === 'B' ? 'B' : 'O';
+            lpText(lp, lpy, typeL, { fill: matchUnknown, size: 9, weight: 'bold' });
+            lpText(lp + 14, lpy, lpXY(m.gt), { size: 10 });
+            lpText(lrx, lpy, `${m.dist.toFixed(1)} cm`, { fill: matchUnknown, size: 10, anchor: 'end' });
+        });
+
+        lpSection('Missing', missingColor, missingL.sort((a, b) => {
+            const nearA = penaltyL.length ? Math.min(...penaltyL.map(s => dist2L(a, s))) : Infinity;
+            const nearB = penaltyL.length ? Math.min(...penaltyL.map(s => dist2L(b, s))) : Infinity;
+            return nearA - nearB;
+        }), (item) => {
+            const near = penaltyL.length ? Math.min(...penaltyL.map(s => dist2L(item, s))) : null;
+            const typeL = item.Type === 'B' ? 'B' : 'O';
+            lpText(lp, lpy, typeL, { fill: missingColor, size: 9, weight: 'bold' });
+            lpText(lp + 14, lpy, lpXY(item), { size: 10 });
+            if (near !== null) lpText(lrx, lpy, `${near.toFixed(1)} cm`, { fill: missingColor, size: 10, anchor: 'end' });
+        });
+
+        lpSection('Penalty', penaltyColor, penaltyL.sort((a, b) => {
+            const nearA = missingL.length ? Math.min(...missingL.map(g => dist2L(a, g))) : Infinity;
+            const nearB = missingL.length ? Math.min(...missingL.map(g => dist2L(b, g))) : Infinity;
+            return nearA - nearB;
+        }), (item) => {
+            const near = missingL.length ? Math.min(...missingL.map(g => dist2L(item, g))) : null;
+            const typeL = item.Type === 'B' ? 'B' : 'O';
+            lpText(lp, lpy, typeL, { fill: penaltyColor, size: 9, weight: 'bold' });
+            lpText(lp + 14, lpy, lpXY(item), { size: 10 });
+            if (near !== null) lpText(lrx, lpy, `${near.toFixed(1)} cm`, { fill: penaltyColor, size: 10, anchor: 'end' });
+        });
+    }
+
     svg += `</svg>`;
-    const typeMap = { truth: 'gt', known: 'known', placement: 'placement', evaluation: 'compare', solution: 'solution' };
-    const viewType = typeMap[currentView] || currentView;
-    const t = currentTask;
-    const seedStr = t ? `${t.params.nkO}_${t.params.nuO}_${t.params.nkB}_${t.params.nuB}_${t.params.nObs}_${t.params.doTrans ? 1 : 0}_${t.seed}` : 'unknown';
-    const blob = new Blob([svg], { type: 'image/svg+xml' }); const url = URL.createObjectURL(blob);
-    const a = document.createElement('a'); a.href = url; a.download = `${viewType}_${seedStr}.svg`; a.click();
+    return svg;
 }
 
 // --- INITIALIZE ---
@@ -1199,6 +1606,7 @@ function wrapNumberInputs() {
 
 window.onload = () => {
     document.querySelectorAll('.mode-btn').forEach(b => b.onclick = () => switchMode(b.dataset.mode));
+    document.querySelectorAll('.eval-sidebar-tab').forEach(b => b.onclick = () => switchEvalSidebarTab(b.dataset.panel));
     document.querySelectorAll('.tab-btn[data-tab]').forEach(b => b.onclick = () => {
         document.querySelectorAll('.tab-btn[data-tab]').forEach(t => t.classList.remove('active'));
         b.classList.add('active'); currentView = b.dataset.tab; draw();
@@ -1206,6 +1614,7 @@ window.onload = () => {
     document.getElementById('generateBtn').onclick = () => generateTask();
     document.getElementById('runEvalBtn').onclick = runEvaluation;
     document.getElementById('runSeedEvalBtn').onclick = runSeedEvaluation;
+    document.getElementById('runSeedEvalBtn2')?.addEventListener('click', runSeedEvaluation);
     document.getElementById('copySeedBtn').onclick = copySeed;
     document.getElementById('displaySeed').onclick = copySeed;
 
@@ -1237,12 +1646,37 @@ window.onload = () => {
         if (parseInt(this.value) === 0) this.value = '';
     });
 
+    document.getElementById('evalThreshold').addEventListener('change', () => {
+        if (evaluationResult) {
+            const activeMethod = document.querySelector('.eval-method-btn.active')?.dataset.method;
+            if (activeMethod === 'seed') runSeedEvaluation();
+            else runEvaluation();
+        } else { draw(); }
+    });
+
     document.getElementById('seedSolutionFile').onchange = (e) => {
-        const seedInput = document.getElementById('evalSeedInput');
-        seedInput.value = '';
         const name = e.target.files[0]?.name ?? '';
-        const m = name.match(/^solution_(\d+_\d+_\d+_\d+_\d+_\d+_\d+)\.csv$/i);
-        if (m) { seedInput.value = m[1]; runSeedEvaluation(); }
+        const m = name.match(/^(\d+_\d+_\d+_\d+_\d+_\d+_\d+)(?:_[^.]+)?\.csv$/i);
+        const extracted = document.getElementById('seedExtracted');
+        const manual = document.getElementById('seedManualEntry');
+        if (!name) {
+            extracted.classList.add('hidden');
+            manual.classList.add('hidden');
+            return;
+        }
+        if (m) {
+            document.getElementById('seedExtractedValue').textContent = m[1];
+            // Store seed for runSeedEvaluation to use
+            document.getElementById('evalSeedInput') && (document.getElementById('evalSeedInput').value = m[1]);
+            extracted.classList.remove('hidden');
+            manual.classList.add('hidden');
+            runSeedEvaluation();
+        } else {
+            const seedInput = document.getElementById('evalSeedInput');
+            if (seedInput) seedInput.value = '';
+            extracted.classList.add('hidden');
+            manual.classList.remove('hidden');
+        }
     };
 
     document.querySelectorAll('.eval-method-btn').forEach(btn => {
@@ -1252,6 +1686,14 @@ window.onload = () => {
             const isSeed = btn.dataset.method === 'seed';
             document.getElementById('evalBySeed').classList.toggle('hidden', !isSeed);
             document.getElementById('evalByFiles').classList.toggle('hidden', isSeed);
+            if (isSeed) {
+                // Reset seed reveal UI unless a file is already loaded
+                const hasFile = !!document.getElementById('seedSolutionFile')?.files[0];
+                if (!hasFile) {
+                    document.getElementById('seedExtracted')?.classList.add('hidden');
+                    document.getElementById('seedManualEntry')?.classList.add('hidden');
+                }
+            }
         };
     });
 
@@ -1279,7 +1721,7 @@ window.onload = () => {
 
         const dataW = maxX - minX + pad * 2;
         const dataH = maxY - minY + pad * 2;
-        const isSplit = (currentMode === 'evaluate' && currentView === 'evaluation');
+        const isSplit = (currentMode === 'evaluate');
         const viewWidth = isSplit ? canvas.width / 2 : canvas.width;
         const scale = Math.min(viewWidth / dataW, canvas.height / dataH);
         const offX = (viewWidth - dataW * scale) / 2;
@@ -1330,10 +1772,10 @@ window.onload = () => {
             }
         } else {
             const knownGTSet = new Set(data.gt.known);
-            const matchedByKnown   = evaluationResult ? new Set(evaluationResult.matches.filter(m =>  knownGTSet.has(m.gt)).map(m => m.sol)) : new Set();
+            const matchedByKnown = evaluationResult ? new Set(evaluationResult.matches.filter(m => knownGTSet.has(m.gt)).map(m => m.sol)) : new Set();
             const matchedByUnknown = evaluationResult ? new Set(evaluationResult.matches.filter(m => !knownGTSet.has(m.gt)).map(m => m.sol)) : new Set();
-            const matchedGTSet     = evaluationResult ? new Set(evaluationResult.matches.map(m => m.gt)) : new Set();
-            const gtLabel  = i => {
+            const matchedGTSet = evaluationResult ? new Set(evaluationResult.matches.map(m => m.gt)) : new Set();
+            const gtLabel = i => {
                 const t = i.Type === 'B' ? 'Box' : 'Object';
                 if (!evaluationResult) return (knownGTSet.has(i) ? 'Maintained' : 'Discovered') + ` ${t}`;
                 if (!matchedGTSet.has(i)) return `Missing ${t}`;
@@ -1342,16 +1784,19 @@ window.onload = () => {
             const solLabel = i => {
                 const t = i.Type === 'B' ? 'Box' : 'Object';
                 if (!evaluationResult) return `Solution ${t}`;
-                if (matchedByKnown.has(i))   return `Maintained ${t}`;
+                if (matchedByKnown.has(i)) return `Maintained ${t}`;
                 if (matchedByUnknown.has(i)) return `Discovered ${t}`;
                 return `Penalty ${t}`;
             };
+            const mouseIsRight = isSplit && cx > canvas.width / 2;
             all = [
-                { ...data.gt.start, _label: 'Start Pose' },
-                ...[...data.gt.known, ...data.gt.unknown].map(i => ({ ...i, _label: gtLabel(i), _ref: i })),
-                ...data.gt.obstacles.map(i => ({ ...i, _label: 'Obstacle' })),
-                ...data.solution.map(i => ({ ...i, _label: solLabel(i), _ref: i })),
+                { ...data.gt.start, _label: 'Start Pose', _side: 'both' },
+                ...[...data.gt.known, ...data.gt.unknown].map(i => ({ ...i, _label: gtLabel(i), _ref: i, _side: 'left' })),
+                ...data.gt.obstacles.map(i => ({ ...i, _label: 'Obstacle', _side: 'both' })),
+                ...data.solution.map(i => ({ ...i, _label: solLabel(i), _ref: i, _side: 'right' })),
             ];
+            // In split view, only snap to items on the side the mouse is over
+            if (isSplit) all = all.filter(i => i._side === 'both' || i._side === (mouseIsRight ? 'right' : 'left'));
         }
 
         // Hit radius in canvas coords, capped to a reasonable world-unit threshold
@@ -1361,7 +1806,8 @@ window.onload = () => {
 
         // Match-line hit detection in canvas space (lines span both panels)
         let nearMatch = null;
-        if (!near && isSplit && evaluationResult && vis('matched')) {
+        if (!near && isSplit && evaluationResult) {
+            const knownGTSetHit = new Set(evalData.gt.known);
             const offX_left = offX;
             const canvasXL = wx => offX_left + (wx - minX + pad) * scale;
             const canvasXR = wx => offX_left + canvas.width / 2 + (wx - minX + pad) * scale;
@@ -1369,6 +1815,9 @@ window.onload = () => {
             const lineHitPx = 8;
             let minLineDist = lineHitPx;
             evaluationResult.matches.forEach(m => {
+                const isMaintained = knownGTSetHit.has(m.gt);
+                if (isMaintained && (!vis('maintained') || !vis('matched_maintained'))) return;
+                if (!isMaintained && (!vis('discovered') || !vis('matched_discovered'))) return;
                 const d = pointToSegmentDist(cx, cy, canvasXL(m.gt.x), canvasYc(m.gt.y), canvasXR(m.sol.x), canvasYc(m.sol.y));
                 if (d < minLineDist) { minLineDist = d; nearMatch = { _isMatch: true, _matchRef: m, _label: 'Match' }; }
             });

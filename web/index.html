@@ -142,125 +142,205 @@
                             </svg>
                         </button>
                     </div>
-                    <button onclick="downloadAllCSV()" class="primary-btn save-all-btn"
-                        style="width:100%;margin-top:0.5rem">
-                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                            stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-                            <polyline points="7 10 12 15 17 10" />
-                            <line x1="12" y1="15" x2="12" y2="3" />
-                        </svg>
-                        Save All
-                    </button>
+                    <div class="save-bulk-row">
+                        <button class="save-bulk-btn" onclick="downloadAllCSV()">
+                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
+                                stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                                <polyline points="14 2 14 8 20 8" />
+                                <line x1="16" y1="13" x2="8" y2="13" />
+                                <line x1="16" y1="17" x2="8" y2="17" />
+                            </svg>
+                            <span>Save CSVs</span>
+                            <div class="save-bulk-tooltip">
+                                <div class="sbt-title">3 CSV files</div>
+                                <div class="sbt-file" data-suffix="_workspace.csv"></div>
+                                <div class="sbt-file" data-suffix="_map.csv"></div>
+                                <div class="sbt-file" data-suffix="_gt.csv"></div>
+                            </div>
+                        </button>
+                        <button class="save-bulk-btn" onclick="downloadAllSVGs()">
+                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
+                                stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
+                                <circle cx="8.5" cy="8.5" r="1.5" />
+                                <polyline points="21 15 16 10 5 21" />
+                            </svg>
+                            <span>Save SVGs</span>
+                            <div class="save-bulk-tooltip">
+                                <div class="sbt-title">3 SVG images</div>
+                                <div class="sbt-file" data-suffix="_gt.svg"></div>
+                                <div class="sbt-file" data-suffix="_known.svg"></div>
+                                <div class="sbt-file" data-suffix="_placement_guide.svg"></div>
+                            </div>
+                        </button>
+                        <button class="save-bulk-btn save-bulk-btn--accent" onclick="downloadZip()">
+                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
+                                stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                                <polyline points="7 10 12 15 17 10" />
+                                <line x1="12" y1="15" x2="12" y2="3" />
+                                <rect x="8" y="2" width="3" height="3" rx="0.5" fill="currentColor" stroke="none" />
+                                <rect x="11" y="5" width="3" height="3" rx="0.5" fill="currentColor" stroke="none" />
+                                <rect x="8" y="8" width="3" height="3" rx="0.5" fill="currentColor" stroke="none" />
+                            </svg>
+                            <span>Save All</span>
+                            <div class="save-bulk-tooltip">
+                                <div class="sbt-title">ZIP — 6 files</div>
+                                <div class="sbt-file" data-suffix="_workspace.csv"></div>
+                                <div class="sbt-file" data-suffix="_map.csv"></div>
+                                <div class="sbt-file" data-suffix="_gt.csv"></div>
+                                <div class="sbt-divider"></div>
+                                <div class="sbt-file" data-suffix="_gt.svg"></div>
+                                <div class="sbt-file" data-suffix="_known.svg"></div>
+                                <div class="sbt-file" data-suffix="_placement_guide.svg"></div>
+                            </div>
+                        </button>
+                    </div>
                 </div>
 
                 <!-- Evaluate Mode Controls -->
                 <div id="evaluateControls" class="hidden">
-                    <div class="eval-method-switch">
-                        <button class="eval-method-btn active" data-method="seed">Single File</button>
-                        <button class="eval-method-btn" data-method="files">4-File</button>
+                    <div class="eval-sidebar-tabs">
+                        <button class="eval-sidebar-tab active" data-panel="input">Input</button>
+                        <button class="eval-sidebar-tab" data-panel="results">Results</button>
                     </div>
 
-                    <div id="evalBySeed" class="control-group">
-                        <p class="hint-text">If you name your solution file with the <em>full</em> seed in the filename
-                            (same as the task file, but with <code>solution</code> instead of
-                            <code>map</code>/<code>gt</code>/<code>workspace</code>), e.g.,
-                            <code>solution_2_4_1_1_3_1_840989.csv</code>, the seed will be extracted
-                            automatically. Otherwise, enter the
-                            <em>full</em> seed manually below.
-                        </p>
-                        <div class="input-field">
-                            <label>Solution (solution_*.csv)</label>
-                            <div class="file-drop-zone">
-                                <input type="file" id="seedSolutionFile" accept=".csv">
-                                <svg class="file-drop-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"
-                                    fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
-                                    stroke-linejoin="round">
-                                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-                                    <polyline points="17 8 12 3 7 8" />
-                                    <line x1="12" y1="3" x2="12" y2="15" />
-                                </svg>
-                                <span class="file-drop-hint">Drop CSV or click to browse</span>
-                                <span class="file-drop-name"></span>
-                            </div>
+                    <div id="evalInputPanel">
+                        <div class="eval-method-switch">
+                            <button class="eval-method-btn active" data-method="seed">Single File</button>
+                            <button class="eval-method-btn" data-method="files">4-File</button>
                         </div>
-                        <div class="input-field">
-                            <label for="evalSeedInput">Seed</label>
-                            <input type="text" id="evalSeedInput" placeholder="Auto-extracted from filename">
-                        </div>
-                        <button id="runSeedEvalBtn" class="primary-btn mt-10" style="width:100%">Evaluate</button>
-                    </div>
 
-                    <div id="evalByFiles" class="control-group hidden">
-                        <div class="file-stack">
+                        <div class="control-group">
                             <div class="input-field">
-                                <label>Workspace (workspace_*.csv)</label>
-                                <div class="file-drop-zone">
-                                    <input type="file" id="workspaceFile" accept=".csv">
-                                    <svg class="file-drop-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"
-                                        fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
-                                        stroke-linejoin="round">
-                                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-                                        <polyline points="17 8 12 3 7 8" />
-                                        <line x1="12" y1="3" x2="12" y2="15" />
-                                    </svg>
-                                    <span class="file-drop-hint">Drop CSV or click</span>
-                                    <span class="file-drop-name"></span>
-                                </div>
-                            </div>
-                            <div class="input-field">
-                                <label>Map (map_*.csv)</label>
-                                <div class="file-drop-zone">
-                                    <input type="file" id="mapFile" accept=".csv">
-                                    <svg class="file-drop-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"
-                                        fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
-                                        stroke-linejoin="round">
-                                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-                                        <polyline points="17 8 12 3 7 8" />
-                                        <line x1="12" y1="3" x2="12" y2="15" />
-                                    </svg>
-                                    <span class="file-drop-hint">Drop CSV or click</span>
-                                    <span class="file-drop-name"></span>
-                                </div>
-                            </div>
-                            <div class="input-field">
-                                <label>Ground Truth (gt_*.csv)</label>
-                                <div class="file-drop-zone">
-                                    <input type="file" id="completeFile" accept=".csv">
-                                    <svg class="file-drop-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"
-                                        fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
-                                        stroke-linejoin="round">
-                                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-                                        <polyline points="17 8 12 3 7 8" />
-                                        <line x1="12" y1="3" x2="12" y2="15" />
-                                    </svg>
-                                    <span class="file-drop-hint">Drop CSV or click</span>
-                                    <span class="file-drop-name"></span>
-                                </div>
-                            </div>
-                            <div class="input-field">
-                                <label>Solution (solution_*.csv)</label>
-                                <div class="file-drop-zone">
-                                    <input type="file" id="solutionFile" accept=".csv">
-                                    <svg class="file-drop-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"
-                                        fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
-                                        stroke-linejoin="round">
-                                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-                                        <polyline points="17 8 12 3 7 8" />
-                                        <line x1="12" y1="3" x2="12" y2="15" />
-                                    </svg>
-                                    <span class="file-drop-hint">Drop CSV or click</span>
-                                    <span class="file-drop-name"></span>
-                                </div>
+                                <label for="evalThreshold">Threshold (cm)</label>
+                                <input type="number" id="evalThreshold" value="20" min="0" step="1">
                             </div>
                         </div>
-                        <div class="actions">
-                            <button id="runEvalBtn" class="primary-btn">Evaluate</button>
-                        </div>
-                    </div>
 
-                    <div id="evaluationResults" class="eval-results-container hidden">
-                        <!-- Results generated by script.js -->
+                        <div id="evalBySeed" class="control-group">
+                            <p class="hint-text">Prefix your solution file with the <em>full</em> seed
+                                (same as the task file, but with <code>solution</code> instead of
+                                <code>map</code>/<code>gt</code>/<code>workspace</code>), e.g.,
+                                <code>2_4_1_1_3_1_840989_solution.csv</code>, the seed will then be extracted
+                                automatically. Otherwise, enter the
+                                <em>full</em> seed manually below.
+                            </p>
+                            <div class="input-field">
+                                <label>Solution (*_solution.csv)</label>
+                                <div class="file-drop-zone">
+                                    <input type="file" id="seedSolutionFile" accept=".csv">
+                                    <svg class="file-drop-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"
+                                        fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                                        stroke-linejoin="round">
+                                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                                        <polyline points="17 8 12 3 7 8" />
+                                        <line x1="12" y1="3" x2="12" y2="15" />
+                                    </svg>
+                                    <span class="file-drop-hint">Drop CSV or click to browse</span>
+                                    <span class="file-drop-name"></span>
+                                </div>
+                            </div>
+                            <!-- shown after file upload -->
+                            <div id="seedExtracted" class="hidden">
+                                <div class="seed-extracted-row">
+                                    <span class="seed-extracted-label">Seed</span>
+                                    <code id="seedExtractedValue"></code>
+                                </div>
+                                <button id="runSeedEvalBtn" class="primary-btn mt-10"
+                                    style="width:100%">Evaluate</button>
+                            </div>
+                            <div id="seedManualEntry" class="hidden">
+                                <p class="hint-text hint-text--warning">Could not extract the full seed from the filename. Rename the file
+                                    or enter the full seed manually below.
+                                </p>
+                                <div class="input-field">
+                                    <label for="evalSeedInput">Full Seed</label>
+                                    <input type="text" id="evalSeedInput" placeholder="e.g. 2_4_1_1_3_1_840989">
+                                </div>
+                                <button id="runSeedEvalBtn2" class="primary-btn mt-10"
+                                    style="width:100%">Evaluate</button>
+                            </div>
+                        </div>
+
+                        <div id="evalByFiles" class="control-group hidden">
+                            <div class="file-stack">
+                                <div class="input-field">
+                                    <label>Workspace (*_workspace.csv)</label>
+                                    <div class="file-drop-zone">
+                                        <input type="file" id="workspaceFile" accept=".csv">
+                                        <svg class="file-drop-icon" xmlns="http://www.w3.org/2000/svg"
+                                            viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                                            stroke-linecap="round" stroke-linejoin="round">
+                                            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                                            <polyline points="17 8 12 3 7 8" />
+                                            <line x1="12" y1="3" x2="12" y2="15" />
+                                        </svg>
+                                        <span class="file-drop-hint">Drop CSV or click to browse</span>
+                                        <span class="file-drop-name"></span>
+                                    </div>
+                                </div>
+                                <div class="input-field">
+                                    <label>Map (*_map.csv)</label>
+                                    <div class="file-drop-zone">
+                                        <input type="file" id="mapFile" accept=".csv">
+                                        <svg class="file-drop-icon" xmlns="http://www.w3.org/2000/svg"
+                                            viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                                            stroke-linecap="round" stroke-linejoin="round">
+                                            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                                            <polyline points="17 8 12 3 7 8" />
+                                            <line x1="12" y1="3" x2="12" y2="15" />
+                                        </svg>
+                                        <span class="file-drop-hint">Drop CSV or click to browse</span>
+                                        <span class="file-drop-name"></span>
+                                    </div>
+                                </div>
+                                <div class="input-field">
+                                    <label>Ground Truth (*_gt.csv)</label>
+                                    <div class="file-drop-zone">
+                                        <input type="file" id="completeFile" accept=".csv">
+                                        <svg class="file-drop-icon" xmlns="http://www.w3.org/2000/svg"
+                                            viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                                            stroke-linecap="round" stroke-linejoin="round">
+                                            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                                            <polyline points="17 8 12 3 7 8" />
+                                            <line x1="12" y1="3" x2="12" y2="15" />
+                                        </svg>
+                                        <span class="file-drop-hint">Drop CSV or click to browse</span>
+                                        <span class="file-drop-name"></span>
+                                    </div>
+                                </div>
+                                <div class="input-field">
+                                    <label>Solution (*_solution.csv)</label>
+                                    <div class="file-drop-zone">
+                                        <input type="file" id="solutionFile" accept=".csv">
+                                        <svg class="file-drop-icon" xmlns="http://www.w3.org/2000/svg"
+                                            viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                                            stroke-linecap="round" stroke-linejoin="round">
+                                            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                                            <polyline points="17 8 12 3 7 8" />
+                                            <line x1="12" y1="3" x2="12" y2="15" />
+                                        </svg>
+                                        <span class="file-drop-hint">Drop CSV or click to browse</span>
+                                        <span class="file-drop-name"></span>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="actions">
+                                <button id="runEvalBtn" class="primary-btn">Evaluate</button>
+                            </div>
+                        </div>
+
+                    </div><!-- end evalInputPanel -->
+
+                    <div id="evalResultsPanel" class="hidden">
+                        <div id="evaluationResults" class="eval-results-container hidden">
+                            <!-- Results summary generated by script.js -->
+                        </div>
+                        <div id="evalDetailedResults" class="eval-detail-list">
+                            <!-- Detailed results generated by script.js -->
+                        </div>
                     </div>
                 </div>
             </section>
@@ -273,14 +353,6 @@
                         <button class="tab-btn" data-tab="placement">Placement Guide</button>
                     </div>
                     <div class="tabs-row-end">
-                        <button onclick="downloadSVG()" class="tab-btn hidden" id="btnDLSVG"
-                            title="Save Image (SVG)"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"
-                                fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
-                                stroke-linejoin="round">
-                                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-                                <polyline points="7 10 12 15 17 10" />
-                                <line x1="12" y1="15" x2="12" y2="3" />
-                            </svg></button>
                         <span class="tab-seed-badge hidden" id="tabSeedBadge">
                             <span class="seed-label">Seed</span>
                             <strong id="displaySeed">-</strong>
@@ -296,6 +368,13 @@
                 <div class="canvas-container">
                     <canvas id="mapCanvas"></canvas>
                     <div id="mapTooltip" class="map-tooltip hidden"></div>
+                    <button onclick="downloadSVG()" class="hidden" id="btnDLSVG" title="Save Image (SVG)"><svg
+                            xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                            stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                            <polyline points="7 10 12 15 17 10" />
+                            <line x1="12" y1="15" x2="12" y2="3" />
+                        </svg></button>
                 </div>
                 <div class="legend" id="legend">
                     <!-- Legend generated by script.js -->
@@ -304,6 +383,7 @@
         </div>
     </main>
 
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
     <script src="script.js"></script>
 </body>
 
