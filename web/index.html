@@ -92,89 +92,8 @@
                 <!-- Shared Exports (Visually consistent) -->
                 <div class="downloads-section hidden" id="downloads">
                     <h3>Export & Save</h3>
-                    <div class="download-btns">
-                        <button id="btnDLWorkspace" onclick="downloadCSV('workspace')" class="secondary-btn">
-                            <svg class="btn-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
-                                stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-                                <polyline points="14 2 14 8 20 8" />
-                                <line x1="16" y1="13" x2="8" y2="13" />
-                                <line x1="16" y1="17" x2="8" y2="17" />
-                            </svg>
-                            <span>Workspace</span>
-                            <svg class="btn-arrow" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
-                                stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-                                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-                                <polyline points="7 10 12 15 17 10" />
-                                <line x1="12" y1="15" x2="12" y2="3" />
-                            </svg>
-                        </button>
-                        <button id="btnDLMap" onclick="downloadCSV('map')" class="secondary-btn">
-                            <svg class="btn-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
-                                stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-                                <polyline points="14 2 14 8 20 8" />
-                                <line x1="16" y1="13" x2="8" y2="13" />
-                                <line x1="16" y1="17" x2="8" y2="17" />
-                            </svg>
-                            <span>Map</span>
-                            <svg class="btn-arrow" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
-                                stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-                                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-                                <polyline points="7 10 12 15 17 10" />
-                                <line x1="12" y1="15" x2="12" y2="3" />
-                            </svg>
-                        </button>
-                        <button id="btnDLGT" onclick="downloadCSV('map_gt')" class="secondary-btn">
-                            <svg class="btn-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
-                                stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-                                <polyline points="14 2 14 8 20 8" />
-                                <line x1="16" y1="13" x2="8" y2="13" />
-                                <line x1="16" y1="17" x2="8" y2="17" />
-                            </svg>
-                            <span>Ground Truth</span>
-                            <svg class="btn-arrow" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
-                                stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-                                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-                                <polyline points="7 10 12 15 17 10" />
-                                <line x1="12" y1="15" x2="12" y2="3" />
-                            </svg>
-                        </button>
-                    </div>
-                    <div class="save-bulk-row">
-                        <button class="save-bulk-btn" onclick="downloadAllCSV()">
-                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
-                                stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-                                <polyline points="14 2 14 8 20 8" />
-                                <line x1="16" y1="13" x2="8" y2="13" />
-                                <line x1="16" y1="17" x2="8" y2="17" />
-                            </svg>
-                            <span>Save CSVs</span>
-                            <div class="save-bulk-tooltip">
-                                <div class="sbt-title">3 CSV files</div>
-                                <div class="sbt-file" data-suffix="_workspace.csv"></div>
-                                <div class="sbt-file" data-suffix="_map.csv"></div>
-                                <div class="sbt-file" data-suffix="_gt.csv"></div>
-                            </div>
-                        </button>
-                        <button class="save-bulk-btn" onclick="downloadAllSVGs()">
-                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
-                                stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                                <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
-                                <circle cx="8.5" cy="8.5" r="1.5" />
-                                <polyline points="21 15 16 10 5 21" />
-                            </svg>
-                            <span>Save SVGs</span>
-                            <div class="save-bulk-tooltip">
-                                <div class="sbt-title">3 SVG images</div>
-                                <div class="sbt-file" data-suffix="_gt.svg"></div>
-                                <div class="sbt-file" data-suffix="_known.svg"></div>
-                                <div class="sbt-file" data-suffix="_placement_guide.svg"></div>
-                            </div>
-                        </button>
-                        <button class="save-bulk-btn save-bulk-btn--accent" onclick="downloadZip()">
+                    <div class="save-bulk-row save-bulk-row--single">
+                        <button class="save-bulk-btn save-bulk-btn--accent save-bulk-btn--full" onclick="downloadZip()">
                             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
                                 stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                                 <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
@@ -186,15 +105,50 @@
                             </svg>
                             <span>Save All</span>
                             <div class="save-bulk-tooltip">
-                                <div class="sbt-title">ZIP — 6 files</div>
+                                <div class="sbt-header">ZIP file</div>
+                                <div class="sbt-divider"></div>
+                                <div class="sbt-title">Task files</div>
                                 <div class="sbt-file" data-suffix="_workspace.csv"></div>
                                 <div class="sbt-file" data-suffix="_map.csv"></div>
                                 <div class="sbt-file" data-suffix="_gt.csv"></div>
                                 <div class="sbt-divider"></div>
+                                <div class="sbt-title">Images</div>
                                 <div class="sbt-file" data-suffix="_gt.svg"></div>
                                 <div class="sbt-file" data-suffix="_known.svg"></div>
                                 <div class="sbt-file" data-suffix="_placement_guide.svg"></div>
                             </div>
+                        </button>
+                    </div>
+                    <div class="save-bulk-row">
+                        <button id="btnDLWorkspace" onclick="downloadCSV('workspace')" class="save-bulk-btn">
+                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
+                                stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                                <polyline points="14 2 14 8 20 8" />
+                                <line x1="16" y1="13" x2="8" y2="13" />
+                                <line x1="16" y1="17" x2="8" y2="17" />
+                            </svg>
+                            <span>Workspace</span>
+                        </button>
+                        <button id="btnDLMap" onclick="downloadCSV('map')" class="save-bulk-btn">
+                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
+                                stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                                <polyline points="14 2 14 8 20 8" />
+                                <line x1="16" y1="13" x2="8" y2="13" />
+                                <line x1="16" y1="17" x2="8" y2="17" />
+                            </svg>
+                            <span>Map</span>
+                        </button>
+                        <button id="btnDLGT" onclick="downloadCSV('map_gt')" class="save-bulk-btn">
+                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
+                                stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                                <polyline points="14 2 14 8 20 8" />
+                                <line x1="16" y1="13" x2="8" y2="13" />
+                                <line x1="16" y1="17" x2="8" y2="17" />
+                            </svg>
+                            <span>GT</span>
                         </button>
                     </div>
                 </div>
@@ -210,13 +164,6 @@
                         <div class="eval-method-switch">
                             <button class="eval-method-btn active" data-method="seed">Single File</button>
                             <button class="eval-method-btn" data-method="files">4-File</button>
-                        </div>
-
-                        <div class="control-group">
-                            <div class="input-field">
-                                <label for="evalThreshold">Threshold (cm)</label>
-                                <input type="number" id="evalThreshold" value="20" min="0" step="1">
-                            </div>
                         </div>
 
                         <div id="evalBySeed" class="control-group">
@@ -248,8 +195,7 @@
                                     <span class="seed-extracted-label">Seed</span>
                                     <code id="seedExtractedValue"></code>
                                 </div>
-                                <button id="runSeedEvalBtn" class="primary-btn mt-10"
-                                    style="width:100%">Evaluate</button>
+                                <button id="runSeedEvalBtn" class="primary-btn mt-10">Evaluate</button>
                             </div>
                             <div id="seedManualEntry" class="hidden">
                                 <p class="hint-text hint-text--warning">Could not extract the full seed from the filename. Rename the file
@@ -259,8 +205,7 @@
                                     <label for="evalSeedInput">Full Seed</label>
                                     <input type="text" id="evalSeedInput" placeholder="e.g. 2_4_1_1_3_1_840989">
                                 </div>
-                                <button id="runSeedEvalBtn2" class="primary-btn mt-10"
-                                    style="width:100%">Evaluate</button>
+                                <button id="runSeedEvalBtn2" class="primary-btn mt-10">Evaluate</button>
                             </div>
                         </div>
 
@@ -335,9 +280,37 @@
                     </div><!-- end evalInputPanel -->
 
                     <div id="evalResultsPanel" class="hidden">
+                        <div id="saveResultsRow" class="save-bulk-row save-bulk-row--single hidden">
+                            <button class="save-bulk-btn save-bulk-btn--accent save-bulk-btn--full" onclick="downloadEvalSVG()">
+                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
+                                    stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                    <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
+                                    <circle cx="8.5" cy="8.5" r="1.5" />
+                                    <polyline points="21 15 16 10 5 21" />
+                                </svg>
+                                <span>Save Results</span>
+                            </button>
+                        </div>
+                        <div class="divider">Settings</div>
+                        <div class="eval-results-settings">
+                            <div class="input-field eval-setting-field eval-setting-field--full">
+                                <label for="evalThreshold">Threshold (cm)</label>
+                                <input type="number" id="evalThreshold" value="20" min="0" step="1">
+                            </div>
+                            <div class="input-field eval-setting-field">
+                                <label for="minDiscObj">Min disc. obj.</label>
+                                <input type="number" id="minDiscObj" value="2" min="0" step="1">
+                            </div>
+                            <div class="input-field eval-setting-field">
+                                <label for="minDiscBox">Min disc. box</label>
+                                <input type="number" id="minDiscBox" value="1" min="0" step="1">
+                            </div>
+                        </div>
+                        <div id="evalSummaryDivider" class="divider hidden">Summary</div>
                         <div id="evaluationResults" class="eval-results-container hidden">
                             <!-- Results summary generated by script.js -->
                         </div>
+                        <div id="evalDetailDivider" class="divider hidden">Detail</div>
                         <div id="evalDetailedResults" class="eval-detail-list">
                             <!-- Detailed results generated by script.js -->
                         </div>
@@ -368,6 +341,23 @@
                 <div class="canvas-container">
                     <canvas id="mapCanvas"></canvas>
                     <div id="mapTooltip" class="map-tooltip hidden"></div>
+                    <div id="canvasDropHint" class="canvas-drop-hint hidden">
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                            <polyline points="17 8 12 3 7 8"/>
+                            <line x1="12" y1="3" x2="12" y2="15"/>
+                        </svg>
+                        <span class="canvas-drop-hint-title">Drop solution CSV here</span>
+                        <span class="canvas-drop-hint-sub">File must be prefixed with the full seed<br>e.g. <code>2_4_1_1_3_1_840989_solution.csv</code></span>
+                    </div>
+                    <div id="canvasDropOverlay" class="canvas-drop-overlay hidden">
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                            <polyline points="17 8 12 3 7 8"/>
+                            <line x1="12" y1="3" x2="12" y2="15"/>
+                        </svg>
+                        <span>Drop to evaluate</span>
+                    </div>
                     <button onclick="downloadSVG()" class="hidden" id="btnDLSVG" title="Save Image (SVG)"><svg
                             xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
                             stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
