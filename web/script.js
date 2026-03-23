@@ -681,8 +681,11 @@ function draw() {
         if (evaluationResult) {
             const knownGTSet = new Set(data.gt.known);
             evaluationResult.matches.forEach(m => {
+                const isMaintained = knownGTSet.has(m.gt);
+                if (isMaintained && !vis('maintained')) return;
+                if (!isMaintained && !vis('discovered')) return;
                 const isHovered = hoverItem && hoverItem._isMatch && hoverItem._matchRef === m;
-                ctx.strokeStyle = knownGTSet.has(m.gt) ? matchKnown : matchUnknown;
+                ctx.strokeStyle = isMaintained ? matchKnown : matchUnknown;
                 ctx.setLineDash([5, 5]); ctx.lineWidth = isHovered ? 2.5 : 1; ctx.globalAlpha = isHovered ? 1 : 0.6;
                 ctx.beginPath(); ctx.moveTo(toXLeft(m.gt.x), toY(m.gt.y)); ctx.lineTo(toXRight(m.sol.x), toY(m.sol.y)); ctx.stroke();
                 ctx.setLineDash([]); ctx.globalAlpha = 1;
@@ -764,17 +767,19 @@ function updateLegend() {
     const ub = { n: 'Unknown Box', key: 'unknown_box', c: getC('--viz-box'), h: true };
     const ob = { n: 'Obstacle', key: 'obstacle', c: getC('--viz-obstacle'), x: true };
     const un = { n: 'Unused', key: 'unused', c: getC('--viz-unused'), h: true };
-    const mnt = { n: 'Maintained', key: 'maintained', c: getC('--viz-match-known') };
-    const dsc = { n: 'Discovered', key: 'discovered',  c: getC('--viz-match-unknown') };
-    const mis = { n: 'Missing',    key: 'missing',     c: getC('--viz-penalty') };
-    const pen = { n: 'Penalty',    key: 'penalty',      c: getC('--viz-penalty') };
+    const mnt  = { n: 'Maintained',       key: 'maintained', c: getC('--viz-match-known') };
+    const dsc  = { n: 'Discovered',       key: 'discovered', c: getC('--viz-match-unknown') };
+    const mis  = { n: 'Missing',          key: 'missing',    c: getC('--viz-penalty') };
+    const pen  = { n: 'Penalty',          key: 'penalty',    c: getC('--viz-penalty') };
+    const lmnt = { n: 'Maintained match', key: 'maintained', c: getC('--viz-match-known'),   d: true };
+    const ldsc = { n: 'Discovered match', key: 'discovered', c: getC('--viz-match-unknown'), d: true };
 
     const items = currentMode === 'generate' ? {
         truth: [ws, sp, ko, kb, uo, ub, ob],
         known: [ws, sp, ko, kb],
         placement: [ws, sp, ko, kb, uo, ub, ob, un],
     }[currentView] ?? [] : {
-        evaluation: [ws, sp, ob, mnt, dsc, mis, pen],
+        evaluation: [ws, sp, ob, mnt, lmnt, dsc, ldsc, mis, pen],
         truth:      [ws, sp, ob, mnt, dsc, mis],
         solution:   [ws, sp, ob, mnt, dsc, pen],
     }[currentView] ?? [];
@@ -784,6 +789,7 @@ function updateLegend() {
         let p = `<div class="legend-patch" style="background:${i.c}; ${i.h ? 'border:2px solid ' + i.c + '; background:transparent' : ''}"></div>`;
         if (i.x) p = `<div class="legend-patch" style="background:transparent; color:${i.c}; display:flex; align-items:center; justify-content:center; font-weight:bold">×</div>`;
         if (i.l) p = `<div class="legend-patch" style="border-top:2px solid ${i.c}; height:0; margin-top:8px"></div>`;
+        if (i.d) p = `<div class="legend-patch" style="border-top:2px dashed ${i.c}; height:0; margin-top:8px"></div>`;
         d.innerHTML = `${p} <span>${i.n}</span>`;
         d.onclick = () => { layerVisible[i.key] = !vis(i.key); updateLegend(); draw(); };
         L.appendChild(d);
@@ -1085,7 +1091,8 @@ function downloadSVG() {
             addLegendItem('Penalty', penaltyColor, 'filled');
         }
         if (currentView === 'evaluation') {
-            addLegendItem('Match line', matchKnown, 'dashed');
+            addLegendItem('Maintained match', matchKnown, 'dashed');
+            addLegendItem('Discovered match', matchUnknown, 'dashed');
         }
     }
 
@@ -1109,6 +1116,30 @@ window.onload = () => {
     document.getElementById('runEvalBtn').onclick = runEvaluation;
     document.getElementById('runSeedEvalBtn').onclick = runSeedEvaluation;
     document.getElementById('copySeedBtn').onclick = copySeed;
+
+    // Keep object/box known+unknown totals within pool size.
+    // The changed field has priority: keep its value if achievable, then adjust the other.
+    const nkOEl = document.getElementById('knownObjects');
+    const nuOEl = document.getElementById('unknownObjects');
+    const nkBEl = document.getElementById('knownBoxes');
+    const nuBEl = document.getElementById('unknownBoxes');
+
+    function syncPair(changedEl, otherEl, pool) {
+        const changedMin = +changedEl.min, otherMin = +otherEl.min;
+        // Clamp changed field to its absolute valid range (priority: keep user's value if achievable)
+        changedEl.max = pool - otherMin;
+        changedEl.value = Math.max(changedMin, Math.min(pool - otherMin, parseInt(changedEl.value) || changedMin));
+        // Clamp other field's value to fit the remaining budget, but keep its max at the absolute
+        // ceiling so spinner arrows are never locked out when the changed field changes later
+        const remaining = pool - +changedEl.value;
+        otherEl.max = pool - changedMin;
+        if (+otherEl.value > remaining) otherEl.value = Math.max(otherMin, remaining);
+    }
+
+    nkOEl.addEventListener('change', () => syncPair(nkOEl, nuOEl, OBJECTS.length));
+    nuOEl.addEventListener('change', () => syncPair(nuOEl, nkOEl, OBJECTS.length));
+    nkBEl.addEventListener('change', () => syncPair(nkBEl, nuBEl, BOXES.length));
+    nuBEl.addEventListener('change', () => syncPair(nuBEl, nkBEl, BOXES.length));
 
     document.getElementById('seedSolutionFile').onchange = (e) => {
         const seedInput = document.getElementById('evalSeedInput');

@@ -1,243 +1,63 @@
 /* ─── Color Tokens ────────────────────────────────────────────────────────── */
 
-/* Dark defaults — fallback for browsers without light-dark() support */
 :root {
     color-scheme: light dark;
 
     /* Surfaces */
-    --bg-color:              #080c14;
-    --panel-bg:              rgba(255, 255, 255, 0.04);
-    --border-color:          rgba(255, 255, 255, 0.09);
-    --glass-shadow:          rgba(0, 0, 0, 0.45);
+    --bg-color:              light-dark(#f1f5f9,                 #080c14);
+    --panel-bg:              light-dark(#ffffff,                  rgba(255, 255, 255, 0.04));
+    --border-color:          light-dark(#e2e8f0,                  rgba(255, 255, 255, 0.09));
+    --glass-shadow:          light-dark(rgba(15, 23, 42, 0.08),   rgba(0, 0, 0, 0.45));
 
     /* Text */
-    --text-primary:          #e2e8f0;
-    --text-secondary:        #94a3b8;
+    --text-primary:          light-dark(#0f172a,                  #e2e8f0);
+    --text-secondary:        light-dark(#64748b,                  #94a3b8);
 
     /* Accent */
-    --accent-primary:        #38bdf8;
-    --accent-secondary:      #818cf8;
-    --accent-glow:           rgba(56, 189, 248, 0.18);
+    --accent-primary:        light-dark(#0284c7,                  #38bdf8);
+    --accent-secondary:      light-dark(#4f46e5,                  #818cf8);
+    --accent-glow:           light-dark(rgba(2, 132, 199, 0.15),  rgba(56, 189, 248, 0.18));
 
     /* UI Controls */
-    --ui-btn-bg:             rgba(255, 255, 255, 0.05);
-    --ui-btn-hover:          rgba(255, 255, 255, 0.11);
-    --ui-input-bg:           rgba(255, 255, 255, 0.06);
-    --ui-input-text:         #e2e8f0;
-    --ui-border-prominent:   rgba(255, 255, 255, 0.14);
-    --ui-switch-bg:          rgba(255, 255, 255, 0.13);
-    --ui-switch-knob:        #f1f5f9;
+    --ui-btn-bg:             light-dark(rgba(15, 23, 42, 0.05),   rgba(255, 255, 255, 0.05));
+    --ui-btn-hover:          light-dark(rgba(15, 23, 42, 0.09),   rgba(255, 255, 255, 0.11));
+    --ui-input-bg:           light-dark(#ffffff,                  rgba(255, 255, 255, 0.06));
+    --ui-input-text:         light-dark(#0f172a,                  #e2e8f0);
+    --ui-border-prominent:   light-dark(rgba(15, 23, 42, 0.12),   rgba(255, 255, 255, 0.14));
+    --ui-switch-bg:          light-dark(rgba(15, 23, 42, 0.15),   rgba(255, 255, 255, 0.13));
+    --ui-switch-knob:        light-dark(#ffffff,                  #f1f5f9);
 
     /* Status */
-    --success:               #4ade80;
-    --warning:               #fbbf24;
+    --success:               light-dark(#16a34a,                  #4ade80);
+    --warning:               light-dark(#d97706,                  #fbbf24);
 
     /* Decorative glows */
-    --glow-top:              rgba(56, 189, 248, 0.10);
-    --glow-bottom:           rgba(129, 140, 248, 0.09);
+    --glow-top:              light-dark(rgba(2, 132, 199, 0.08),  rgba(56, 189, 248, 0.10));
+    --glow-bottom:           light-dark(rgba(79, 70, 229, 0.07),  rgba(129, 140, 248, 0.09));
 
     /* Visualization */
-    --viz-bg:                #0d1526;
-    --viz-grid:              rgba(255, 255, 255, 0.15);
-    --viz-text:              rgba(255, 255, 255, 0.60);
-    --viz-obstacle:          #94a3b8;
-    --obstacle-color:        #cbd5e1;
-    --viz-workspace:         #0ea5e9;
-    --viz-start:             #10b981;
-    --viz-obj:               #f43f5e;
-    --viz-box:               #8b5cf6;
-    --viz-match-known:       #22c55e;
-    --viz-match-unknown:     #f59e0b;
-    --viz-penalty:           #fb7185;
-    --viz-hover:             #38bdf8;
-    --viz-tooltip:           rgba(0, 0, 0, 0.85);
-    --viz-axis:              rgba(255, 255, 255, 0.45);
-    --viz-unused:            rgba(148, 163, 184, 0.45);
+    --viz-bg:                light-dark(#f8fafc,                  #0d1526);
+    --viz-grid:              light-dark(rgba(15, 23, 42, 0.14),   rgba(255, 255, 255, 0.15));
+    --viz-text:              light-dark(rgba(15, 23, 42, 0.75),   rgba(255, 255, 255, 0.60));
+    --viz-obstacle:          light-dark(#475569,                  #94a3b8);
+    --obstacle-color:        light-dark(#334155,                  #cbd5e1);
+    --viz-workspace:         light-dark(#0369a1,                  #0ea5e9);
+    --viz-start:             light-dark(#047857,                  #10b981);
+    --viz-obj:               light-dark(#be123c,                  #f43f5e);
+    --viz-box:               light-dark(#6d28d9,                  #8b5cf6);
+    --viz-match-known:       light-dark(#15803d,                  #22c55e);
+    --viz-match-unknown:     light-dark(#b45309,                  #f59e0b);
+    --viz-penalty:           light-dark(#9f1239,                  #fb7185);
+    --viz-hover:             light-dark(#0369a1,                  #38bdf8);
+    --viz-tooltip:           light-dark(rgba(15, 23, 42, 0.88),   rgba(0, 0, 0, 0.85));
+    --viz-axis:              light-dark(rgba(15, 23, 42, 0.55),   rgba(255, 255, 255, 0.45));
+    --viz-unused:            light-dark(rgba(71, 85, 105, 0.55),  rgba(148, 163, 184, 0.45));
 }
 
-/* Light fallback (for browsers without light-dark() support) */
-@media (prefers-color-scheme: light) {
-    :root {
-        --bg-color:              #f1f5f9;
-        --panel-bg:              #ffffff;
-        --border-color:          #e2e8f0;
-        --glass-shadow:          rgba(15, 23, 42, 0.08);
-        --text-primary:          #0f172a;
-        --text-secondary:        #64748b;
-        --accent-primary:        #0284c7;
-        --accent-secondary:      #4f46e5;
-        --accent-glow:           rgba(2, 132, 199, 0.15);
-        --ui-btn-bg:             rgba(15, 23, 42, 0.05);
-        --ui-btn-hover:          rgba(15, 23, 42, 0.09);
-        --ui-input-bg:           #ffffff;
-        --ui-input-text:         #0f172a;
-        --ui-border-prominent:   rgba(15, 23, 42, 0.12);
-        --ui-switch-bg:          rgba(15, 23, 42, 0.15);
-        --ui-switch-knob:        #ffffff;
-        --success:               #16a34a;
-        --warning:               #d97706;
-        --glow-top:              rgba(2, 132, 199, 0.08);
-        --glow-bottom:           rgba(79, 70, 229, 0.07);
-        --viz-bg:                #f8fafc;
-        --viz-grid:              rgba(15, 23, 42, 0.06);
-        --viz-text:              rgba(15, 23, 42, 0.65);
-        --viz-obstacle:          #475569;
-        --obstacle-color:        #334155;
-        --viz-workspace:         #0369a1;
-        --viz-start:             #047857;
-        --viz-obj:               #be123c;
-        --viz-box:               #6d28d9;
-        --viz-match-known:       #15803d;
-        --viz-match-unknown:     #b45309;
-        --viz-penalty:           #9f1239;
-        --viz-hover:             #0369a1;
-        --viz-tooltip:           rgba(15, 23, 42, 0.88);
-        --viz-axis:              rgba(15, 23, 42, 0.45);
-        --viz-unused:            rgba(71, 85, 105, 0.45);
-    }
-}
-
-/* ─── Modern: light-dark() ────────────────────────────────────────────────── */
-@supports (color: light-dark(red, blue)) {
-    :root {
-        /* Surfaces */
-        --bg-color:              light-dark(#f1f5f9,                 #080c14);
-        --panel-bg:              light-dark(#ffffff,                  rgba(255, 255, 255, 0.04));
-        --border-color:          light-dark(#e2e8f0,                  rgba(255, 255, 255, 0.09));
-        --glass-shadow:          light-dark(rgba(15, 23, 42, 0.08),   rgba(0, 0, 0, 0.45));
-
-        /* Text */
-        --text-primary:          light-dark(#0f172a,                  #e2e8f0);
-        --text-secondary:        light-dark(#64748b,                  #94a3b8);
-
-        /* Accent */
-        --accent-primary:        light-dark(#0284c7,                  #38bdf8);
-        --accent-secondary:      light-dark(#4f46e5,                  #818cf8);
-        --accent-glow:           light-dark(rgba(2, 132, 199, 0.15),  rgba(56, 189, 248, 0.18));
-
-        /* UI Controls */
-        --ui-btn-bg:             light-dark(rgba(15, 23, 42, 0.05),   rgba(255, 255, 255, 0.05));
-        --ui-btn-hover:          light-dark(rgba(15, 23, 42, 0.09),   rgba(255, 255, 255, 0.11));
-        --ui-input-bg:           light-dark(#ffffff,                  rgba(255, 255, 255, 0.06));
-        --ui-input-text:         light-dark(#0f172a,                  #e2e8f0);
-        --ui-border-prominent:   light-dark(rgba(15, 23, 42, 0.12),   rgba(255, 255, 255, 0.14));
-        --ui-switch-bg:          light-dark(rgba(15, 23, 42, 0.15),   rgba(255, 255, 255, 0.13));
-        --ui-switch-knob:        light-dark(#ffffff,                  #f1f5f9);
-
-        /* Status */
-        --success:               light-dark(#16a34a,                  #4ade80);
-        --warning:               light-dark(#d97706,                  #fbbf24);
-
-        /* Decorative glows */
-        --glow-top:              light-dark(rgba(2, 132, 199, 0.08),  rgba(56, 189, 248, 0.10));
-        --glow-bottom:           light-dark(rgba(79, 70, 229, 0.07),  rgba(129, 140, 248, 0.09));
-
-        /* Visualization */
-        --viz-bg:                light-dark(#f8fafc,                  #0d1526);
-        --viz-grid:              light-dark(rgba(15, 23, 42, 0.06),   rgba(255, 255, 255, 0.15));
-        --viz-text:              light-dark(rgba(15, 23, 42, 0.65),   rgba(255, 255, 255, 0.60));
-        --viz-obstacle:          light-dark(#475569,                  #94a3b8);
-        --obstacle-color:        light-dark(#334155,                  #cbd5e1);
-        --viz-workspace:         light-dark(#0369a1,                  #0ea5e9);
-        --viz-start:             light-dark(#047857,                  #10b981);
-        --viz-obj:               light-dark(#be123c,                  #f43f5e);
-        --viz-box:               light-dark(#6d28d9,                  #8b5cf6);
-        --viz-match-known:       light-dark(#15803d,                  #22c55e);
-        --viz-match-unknown:     light-dark(#b45309,                  #f59e0b);
-        --viz-penalty:           light-dark(#9f1239,                  #fb7185);
-        --viz-hover:             light-dark(#0369a1,                  #38bdf8);
-        --viz-tooltip:           light-dark(rgba(15, 23, 42, 0.88),   rgba(0, 0, 0, 0.85));
-        --viz-axis:              light-dark(rgba(15, 23, 42, 0.45),   rgba(255, 255, 255, 0.45));
-        --viz-unused:            light-dark(rgba(71, 85, 105, 0.45),  rgba(148, 163, 184, 0.45));
-    }
-
-    /* Manual overrides — just flip color-scheme; light-dark() re-evaluates automatically */
-    [data-theme="light"] { color-scheme: light; }
-    [data-theme="dark"]  { color-scheme: dark; }
-    [data-theme="auto"]  { color-scheme: light dark; }
-}
-
-/* Legacy manual theme overrides (only for browsers without light-dark() support) */
-@supports not (color: light-dark(red, blue)) {
-    [data-theme="light"] {
-        color-scheme: light;
-        --bg-color:              #f1f5f9;
-        --panel-bg:              #ffffff;
-        --border-color:          #e2e8f0;
-        --glass-shadow:          rgba(15, 23, 42, 0.08);
-        --text-primary:          #0f172a;
-        --text-secondary:        #64748b;
-        --accent-primary:        #0284c7;
-        --accent-secondary:      #4f46e5;
-        --accent-glow:           rgba(2, 132, 199, 0.15);
-        --ui-btn-bg:             rgba(15, 23, 42, 0.05);
-        --ui-btn-hover:          rgba(15, 23, 42, 0.09);
-        --ui-input-bg:           #ffffff;
-        --ui-input-text:         #0f172a;
-        --ui-border-prominent:   rgba(15, 23, 42, 0.12);
-        --ui-switch-bg:          rgba(15, 23, 42, 0.15);
-        --ui-switch-knob:        #ffffff;
-        --success:               #16a34a;
-        --warning:               #d97706;
-        --glow-top:              rgba(2, 132, 199, 0.08);
-        --glow-bottom:           rgba(79, 70, 229, 0.07);
-        --viz-bg:                #f8fafc;
-        --viz-grid:              rgba(15, 23, 42, 0.06);
-        --viz-text:              rgba(15, 23, 42, 0.65);
-        --viz-obstacle:          #475569;
-        --obstacle-color:        #334155;
-        --viz-workspace:         #0369a1;
-        --viz-start:             #047857;
-        --viz-obj:               #be123c;
-        --viz-box:               #6d28d9;
-        --viz-match-known:       #15803d;
-        --viz-match-unknown:     #b45309;
-        --viz-penalty:           #9f1239;
-        --viz-hover:             #0369a1;
-        --viz-tooltip:           rgba(15, 23, 42, 0.88);
-        --viz-axis:              rgba(15, 23, 42, 0.45);
-        --viz-unused:            rgba(71, 85, 105, 0.45);
-    }
-    [data-theme="dark"] {
-        color-scheme: dark;
-        --bg-color:              #080c14;
-        --panel-bg:              rgba(255, 255, 255, 0.04);
-        --border-color:          rgba(255, 255, 255, 0.09);
-        --glass-shadow:          rgba(0, 0, 0, 0.45);
-        --text-primary:          #e2e8f0;
-        --text-secondary:        #94a3b8;
-        --accent-primary:        #38bdf8;
-        --accent-secondary:      #818cf8;
-        --accent-glow:           rgba(56, 189, 248, 0.18);
-        --ui-btn-bg:             rgba(255, 255, 255, 0.05);
-        --ui-btn-hover:          rgba(255, 255, 255, 0.11);
-        --ui-input-bg:           rgba(255, 255, 255, 0.06);
-        --ui-input-text:         #e2e8f0;
-        --ui-border-prominent:   rgba(255, 255, 255, 0.14);
-        --ui-switch-bg:          rgba(255, 255, 255, 0.13);
-        --ui-switch-knob:        #f1f5f9;
-        --success:               #4ade80;
-        --warning:               #fbbf24;
-        --glow-top:              rgba(56, 189, 248, 0.10);
-        --glow-bottom:           rgba(129, 140, 248, 0.09);
-        --viz-bg:                #0d1526;
-        --viz-grid:              rgba(255, 255, 255, 0.15);
-        --viz-text:              rgba(255, 255, 255, 0.60);
-        --viz-obstacle:          #94a3b8;
-        --obstacle-color:        #cbd5e1;
-        --viz-workspace:         #0ea5e9;
-        --viz-start:             #10b981;
-        --viz-obj:               #f43f5e;
-        --viz-box:               #8b5cf6;
-        --viz-match-known:       #22c55e;
-        --viz-match-unknown:     #f59e0b;
-        --viz-penalty:           #fb7185;
-        --viz-hover:             #38bdf8;
-        --viz-tooltip:           rgba(0, 0, 0, 0.85);
-        --viz-axis:              rgba(255, 255, 255, 0.45);
-        --viz-unused:            rgba(148, 163, 184, 0.45);
-    }
-}
+/* Manual theme overrides — flip color-scheme; light-dark() re-evaluates automatically */
+[data-theme="light"] { color-scheme: light; }
+[data-theme="dark"]  { color-scheme: dark; }
+[data-theme="auto"]  { color-scheme: light dark; }
 
 /* ─── Reset ───────────────────────────────────────────────────────────────── */
 
