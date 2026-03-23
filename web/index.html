@@ -71,7 +71,7 @@
                         </div>
                         <div class="input-field mt-10">
                             <label for="seedInput">Seed (Optional)</label>
-                            <input type="number" id="seedInput" placeholder="Auto-generate">
+                            <input type="number" id="seedInput" placeholder="Auto-generate" min="0">
                         </div>
                     </div>
 
@@ -103,7 +103,12 @@
                     <div id="evalBySeed" class="control-group">
                         <div class="input-field">
                             <label>Solution (solution_*.csv)</label>
-                            <input type="file" id="seedSolutionFile" accept=".csv">
+                            <div class="file-drop-zone">
+                                <input type="file" id="seedSolutionFile" accept=".csv">
+                                <svg class="file-drop-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+                                <span class="file-drop-hint">Drop CSV or click to browse</span>
+                                <span class="file-drop-name"></span>
+                            </div>
                         </div>
                         <div class="input-field">
                             <label for="evalSeedInput">Seed</label>
@@ -116,19 +121,39 @@
                         <div class="file-stack">
                             <div class="input-field">
                                 <label>Workspace (workspace_*.csv)</label>
-                                <input type="file" id="workspaceFile" accept=".csv">
+                                <div class="file-drop-zone">
+                                    <input type="file" id="workspaceFile" accept=".csv">
+                                    <svg class="file-drop-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+                                    <span class="file-drop-hint">Drop CSV or click</span>
+                                    <span class="file-drop-name"></span>
+                                </div>
                             </div>
                             <div class="input-field">
                                 <label>Map (map_*.csv)</label>
-                                <input type="file" id="mapFile" accept=".csv">
+                                <div class="file-drop-zone">
+                                    <input type="file" id="mapFile" accept=".csv">
+                                    <svg class="file-drop-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+                                    <span class="file-drop-hint">Drop CSV or click</span>
+                                    <span class="file-drop-name"></span>
+                                </div>
                             </div>
                             <div class="input-field">
                                 <label>Ground Truth (gt_*.csv)</label>
-                                <input type="file" id="completeFile" accept=".csv">
+                                <div class="file-drop-zone">
+                                    <input type="file" id="completeFile" accept=".csv">
+                                    <svg class="file-drop-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+                                    <span class="file-drop-hint">Drop CSV or click</span>
+                                    <span class="file-drop-name"></span>
+                                </div>
                             </div>
                             <div class="input-field">
                                 <label>Solution (solution_*.csv)</label>
-                                <input type="file" id="solutionFile" accept=".csv">
+                                <div class="file-drop-zone">
+                                    <input type="file" id="solutionFile" accept=".csv">
+                                    <svg class="file-drop-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+                                    <span class="file-drop-hint">Drop CSV or click</span>
+                                    <span class="file-drop-name"></span>
+                                </div>
                             </div>
                         </div>
                         <div class="actions">
@@ -150,10 +175,11 @@
                         <button class="tab-btn" data-tab="placement">Placement Guide</button>
                     </div>
                     <div class="tabs-row-end">
-                        <button onclick="downloadSVG()" class="small-btn hidden" id="btnDLSVG">SVG</button>
+                        <button onclick="downloadSVG()" class="tab-btn hidden" id="btnDLSVG" title="Save Image (SVG)"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg></button>
                         <span class="tab-seed-badge hidden" id="tabSeedBadge">
-                            Seed: <strong id="displaySeed">-</strong>
-                            <button id="copySeedBtn" class="small-btn">Copy</button>
+                            <span class="seed-label">Seed</span>
+                            <strong id="displaySeed">-</strong>
+                            <button id="copySeedBtn" title="Copy seed"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></button>
                         </span>
                     </div>
                 </div>

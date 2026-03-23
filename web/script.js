@@ -103,13 +103,8 @@ function copySeed() {
     if (seed === '-') return;
     navigator.clipboard.writeText(seed).then(() => {
         const btn = document.getElementById('copySeedBtn');
-        const oldText = btn.textContent;
-        btn.textContent = 'Copied!';
-        btn.classList.add('success');
-        setTimeout(() => {
-            btn.textContent = oldText;
-            btn.classList.remove('success');
-        }, 2000);
+        btn.classList.add('copied');
+        setTimeout(() => btn.classList.remove('copied'), 2000);
     }).catch(err => {
         console.error("Failed to copy seed: ", err);
     });
@@ -263,7 +258,6 @@ function switchMode(mode) {
         document.getElementById('downloads').classList.toggle('hidden', !currentTask);
         ['btnDLWorkspace', 'btnDLMap', 'btnDLGT'].forEach(id => document.getElementById(id).style.display = 'inline-block');
         tabSeedBadge.classList.toggle('hidden', !currentTask);
-        document.getElementById('btnDLSVG').classList.toggle('hidden', !currentTask);
     } else {
         tabs[0].textContent = 'Side-by-Side Compare'; tabs[0].dataset.tab = 'evaluation';
         tabs[1].textContent = 'Ground Truth'; tabs[1].dataset.tab = 'truth';
@@ -272,7 +266,6 @@ function switchMode(mode) {
         document.getElementById('downloads').classList.add('hidden');
         ['btnDLWorkspace', 'btnDLMap', 'btnDLGT'].forEach(id => document.getElementById(id).style.display = 'none');
         tabSeedBadge.classList.add('hidden');
-        document.getElementById('btnDLSVG').classList.toggle('hidden', !evalData);
     }
     tabs.forEach(t => t.classList.toggle('active', t.dataset.tab === currentView));
     draw();
@@ -292,13 +285,14 @@ function generateTask() {
         doTrans: document.getElementById('transformWorkspace').checked ? 1 : 0
     };
 
-    const randomSeed = seedVal ? parseInt(seedVal) : Math.floor(Math.random() * 1000000);
+    const parsedSeedVal = parseInt(seedVal);
+    const isAuto = !seedVal || parsedSeedVal === 0;
+    const randomSeed = isAuto ? Math.floor(Math.random() * 1000000) : parsedSeedVal;
     const fullSeed = `${params.nkO}_${params.nuO}_${params.nkB}_${params.nuB}_${params.nObs}_${params.doTrans}_${randomSeed}`;
 
     setSeed(randomSeed);
     document.getElementById('displaySeed').textContent = fullSeed;
     document.getElementById('tabSeedBadge').classList.remove('hidden');
-    document.getElementById('btnDLSVG').classList.remove('hidden');
 
     // Clear input so next click generates a fresh random map
     seedInputEl.value = "";
@@ -381,7 +375,8 @@ async function runEvaluation() {
 async function runSeedEvaluation() {
     const seedValue = document.getElementById('evalSeedInput').value.trim();
     const solFile = document.getElementById('seedSolutionFile').files[0];
-    if (!seedValue || !solFile) { alert("Enter seed and upload solution map!"); return; }
+    if (!solFile) { alert("Please upload a solution map file."); return; }
+    if (!seedValue) { alert("Could not extract seed from filename. Please enter the seed manually."); return; }
 
     const match = seedValue.match(/(\d+)_(\d+)_(\d+)_(\d+)_(\d+)_(\d+)_(\d+)/);
     let nkO, nuO, nkB, nuB, nObs, doTrans, randomSeed;
@@ -455,7 +450,6 @@ function performEvaluation(workspace, gt, solution) {
     };
 
     displayResults();
-    document.getElementById('btnDLSVG').classList.remove('hidden');
     draw();
 }
 
@@ -478,6 +472,8 @@ function draw() {
     const canvas = document.getElementById('mapCanvas');
     const ctx = canvas.getContext('2d');
     const container = canvas.parentElement;
+    const btnSave = document.getElementById('btnDLSVG');
+    btnSave.classList.add('hidden');
 
     // Fit canvas to container
     const rect = container.getBoundingClientRect();
@@ -486,6 +482,7 @@ function draw() {
 
     const data = currentMode === 'generate' ? (currentTask ? (currentView === 'placement' ? currentTask.base : currentTask.transformed) : null) : evalData;
     if (!data) return;
+    btnSave.classList.remove('hidden');
 
     // Get Colors from CSS
     const getC = resolveCSSColor;
@@ -1106,16 +1103,92 @@ function downloadSVG() {
 }
 
 // --- INITIALIZE ---
+function setupFileDropZones() {
+    document.querySelectorAll('.file-drop-zone').forEach(zone => {
+        const input = zone.querySelector('input[type="file"]');
+        const nameEl = zone.querySelector('.file-drop-name');
+
+        zone.addEventListener('click', e => { if (e.target !== input) input.click(); });
+
+        const updateDisplay = () => {
+            const name = input.files[0]?.name ?? '';
+            nameEl.textContent = name;
+            zone.classList.toggle('has-file', !!name);
+        };
+        input.addEventListener('change', updateDisplay);
+
+        zone.addEventListener('dragover', e => { e.preventDefault(); zone.classList.add('drag-over'); });
+        zone.addEventListener('dragleave', () => zone.classList.remove('drag-over'));
+        zone.addEventListener('drop', e => {
+            e.preventDefault();
+            zone.classList.remove('drag-over');
+            const file = [...e.dataTransfer.files].find(f => f.name.endsWith('.csv'));
+            if (!file) return;
+            const dt = new DataTransfer();
+            dt.items.add(file);
+            input.files = dt.files;
+            input.dispatchEvent(new Event('change', { bubbles: true }));
+        });
+    });
+}
+
+function wrapNumberInputs() {
+    document.querySelectorAll('input[type="number"]').forEach(input => {
+        const wrap = document.createElement('div');
+        wrap.className = 'num-spin-wrap';
+        input.parentNode.insertBefore(wrap, input);
+
+        const makeBtn = (label, delta) => {
+            const btn = document.createElement('button');
+            btn.type = 'button';
+            btn.className = 'num-spin-btn';
+            btn.textContent = label;
+
+            const doStep = () => {
+                const s = +(input.step || 1);
+                const cur = parseFloat(input.value) || 0;
+                const min = input.min !== '' ? +input.min : -Infinity;
+                const max = input.max !== '' ? +input.max : Infinity;
+                const next = Math.max(min, Math.min(max, cur + delta * s));
+                if (next === +input.value) return false;
+                input.value = next;
+                input.dispatchEvent(new Event('change', { bubbles: true }));
+                return true;
+            };
+
+            let repeatTimer = null;
+            const stopRepeat = () => { clearInterval(repeatTimer); repeatTimer = null; };
+
+            btn.addEventListener('mousedown', e => {
+                e.preventDefault(); // keep focus on input
+                if (!doStep()) return;
+                repeatTimer = setTimeout(() => {
+                    repeatTimer = setInterval(() => { if (!doStep()) stopRepeat(); }, 60);
+                }, 400);
+            });
+            document.addEventListener('mouseup', stopRepeat);
+            btn.addEventListener('mouseleave', () => { if (repeatTimer) stopRepeat(); });
+
+            return btn;
+        };
+
+        wrap.appendChild(makeBtn('−', -1));
+        wrap.appendChild(input);
+        wrap.appendChild(makeBtn('+', 1));
+    });
+}
+
 window.onload = () => {
     document.querySelectorAll('.mode-btn').forEach(b => b.onclick = () => switchMode(b.dataset.mode));
-    document.querySelectorAll('.tab-btn').forEach(b => b.onclick = () => {
-        document.querySelectorAll('.tab-btn').forEach(t => t.classList.remove('active'));
+    document.querySelectorAll('.tab-btn[data-tab]').forEach(b => b.onclick = () => {
+        document.querySelectorAll('.tab-btn[data-tab]').forEach(t => t.classList.remove('active'));
         b.classList.add('active'); currentView = b.dataset.tab; draw();
     });
     document.getElementById('generateBtn').onclick = () => generateTask();
     document.getElementById('runEvalBtn').onclick = runEvaluation;
     document.getElementById('runSeedEvalBtn').onclick = runSeedEvaluation;
     document.getElementById('copySeedBtn').onclick = copySeed;
+    document.getElementById('displaySeed').onclick = copySeed;
 
     // Keep object/box known+unknown totals within pool size.
     // The changed field has priority: keep its value if achievable, then adjust the other.
@@ -1141,12 +1214,16 @@ window.onload = () => {
     nkBEl.addEventListener('change', () => syncPair(nkBEl, nuBEl, BOXES.length));
     nuBEl.addEventListener('change', () => syncPair(nuBEl, nkBEl, BOXES.length));
 
+    document.getElementById('seedInput').addEventListener('change', function () {
+        if (parseInt(this.value) === 0) this.value = '';
+    });
+
     document.getElementById('seedSolutionFile').onchange = (e) => {
         const seedInput = document.getElementById('evalSeedInput');
         seedInput.value = '';
         const name = e.target.files[0]?.name ?? '';
         const m = name.match(/^solution_(\d+_\d+_\d+_\d+_\d+_\d+_\d+)\.csv$/i);
-        if (m) seedInput.value = m[1];
+        if (m) { seedInput.value = m[1]; runSeedEvaluation(); }
     };
 
     document.querySelectorAll('.eval-method-btn').forEach(btn => {
@@ -1286,6 +1363,9 @@ window.onload = () => {
 
     initTheme();
     document.getElementById('themeToggle').onclick = toggleTheme;
+
+    setupFileDropZones();
+    wrapNumberInputs();
 
     window.onresize = draw;
     const themeMediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
