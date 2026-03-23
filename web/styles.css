@@ -418,38 +418,68 @@ input:checked+.slider:before {
 
 .download-btns {
     display: flex;
-    flex-direction: row;
-    gap: 0.5rem;
-}
-
-.download-btns .secondary-btn {
-    flex: 1 1 auto;
-    min-width: 0;
-    padding: 0.8rem 0.6rem;
-    font-size: 1rem;
-    justify-content: center;
-    text-align: center;
-    white-space: nowrap;
+    flex-direction: column;
+    gap: 0.4rem;
 }
 
 .secondary-btn {
     background: var(--ui-btn-bg);
     border: 1px solid var(--ui-border-prominent);
-    padding: 0.8rem;
+    padding: 0.65rem 0.8rem;
     border-radius: 8px;
     color: var(--text-primary);
     cursor: pointer;
     transition: all 0.2s;
     text-align: left;
     display: flex;
-    justify-content: space-between;
     align-items: center;
+    gap: 0.6rem;
+    font-size: 0.9rem;
+    width: 100%;
+}
+
+.secondary-btn span {
+    flex: 1;
+    text-align: left;
+}
+
+.secondary-btn .btn-icon {
+    width: 1rem;
+    height: 1rem;
+    flex-shrink: 0;
+    color: var(--accent-primary);
+}
+
+.secondary-btn .btn-arrow {
+    width: 0.85rem;
+    height: 0.85rem;
+    flex-shrink: 0;
+    color: var(--text-secondary);
+    transition: transform 0.2s, color 0.2s;
 }
 
 .secondary-btn:hover {
     background: var(--ui-btn-hover);
     border-color: var(--accent-primary);
-    transform: translateX(5px);
+    transform: translateX(4px);
+}
+
+.secondary-btn:hover .btn-arrow {
+    transform: translateY(2px);
+    color: var(--accent-primary);
+}
+
+.save-all-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.6rem;
+}
+
+.save-all-btn svg {
+    width: 1.1rem;
+    height: 1.1rem;
+    flex-shrink: 0;
 }
 
 
