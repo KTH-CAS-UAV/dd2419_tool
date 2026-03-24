@@ -562,6 +562,8 @@ function displayResults() {
     const s = evaluationResult.stats;
     resDiv.classList.remove('hidden');
     document.getElementById('saveResultsRow')?.classList.remove('hidden');
+    document.getElementById('evalSettingsDivider')?.classList.remove('hidden');
+    document.getElementById('evalSettingsGrid')?.classList.remove('hidden');
     document.getElementById('evalSummaryDivider')?.classList.remove('hidden');
     document.getElementById('evalDetailDivider')?.classList.remove('hidden');
 
@@ -1302,10 +1304,13 @@ function generateSVGContent(viewOverride) {
 function downloadSVG() {
     const svgString = _buildSVGString();
     if (!svgString) return;
-    const typeMap = { truth: 'gt', known: 'known', placement: 'placement', all: 'eval', gt: 'gt', sol: 'solution' };
+    const typeMap = { truth: 'gt', known: 'known', placement: 'placement_guide', all: 'eval', gt: 'gt', sol: 'solution' };
     const viewType = typeMap[currentView] || currentView;
     const t = currentTask;
-    const fullSeed = t ? `${t.params.nkO}_${t.params.nuO}_${t.params.nkB}_${t.params.nuB}_${t.params.nObs}_${t.params.doTrans ? 1 : 0}_${t.seed}` : 'unknown';
+    const evalSeed = document.getElementById('seedExtractedValue')?.textContent.trim() || document.getElementById('evalSeedInput')?.value.trim();
+    const fullSeed = t
+        ? `${t.params.nkO}_${t.params.nuO}_${t.params.nkB}_${t.params.nuB}_${t.params.nObs}_${t.params.doTrans ? 1 : 0}_${t.seed}`
+        : (evalSeed || 'eval');
     const fileName = `${fullSeed}_${viewType}`;
     const blob = new Blob([svgString], { type: 'image/svg+xml' });
     const url = URL.createObjectURL(blob);
@@ -1542,9 +1547,6 @@ function _buildSVGString() {
         svgRow('Unknown Boxes', `${p.nuB}`);
         svgRow('Obstacles', `${p.nObs}`);
         svgRow('Transform', p.doTrans ? 'Applied' : 'None');
-    } else if (currentMode === 'evaluate') {
-        const viewNames = { evaluation: 'Side-by-Side', truth: 'Ground Truth', solution: 'Solution' };
-        svgRow('View', viewNames[currentView] || currentView);
     }
 
     if (currentMode === 'evaluate') {

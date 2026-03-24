@@ -42,12 +42,12 @@
     --viz-obstacle:          light-dark(#475569,                  #94a3b8);
     --obstacle-color:        light-dark(#334155,                  #cbd5e1);
     --viz-workspace:         light-dark(#0369a1,                  #0ea5e9);
-    --viz-start:             light-dark(#047857,                  #10b981);
+    --viz-start:             light-dark(#be185d,                  #f472b6);
     --viz-obj:               light-dark(#be123c,                  #f43f5e);
     --viz-box:               light-dark(#6d28d9,                  #8b5cf6);
     --viz-match-known:       light-dark(#1d4ed8,                  #60a5fa);
     --viz-match-unknown:     light-dark(#15803d,                  #22c55e);
-    --viz-penalty:           light-dark(#9f1239,                  #fb7185);
+    --viz-penalty:           light-dark(#dc2626,                  #ef4444);
     --viz-missing:           light-dark(#b45309,                  #f59e0b);
     --viz-hover:             light-dark(#0369a1,                  #38bdf8);
     --viz-tooltip:           light-dark(rgba(15, 23, 42, 0.88),   rgba(0, 0, 0, 0.85));
@@ -95,10 +95,10 @@ body {
     width: 100%;
     max-width: 1600px;
     height: 100vh;
-    padding: 1.25rem;
+    padding: 0.75rem 1.25rem;
     display: flex;
     flex-direction: column;
-    gap: 1.25rem;
+    gap: 0.6rem;
 }
 
 .glass-panel {
@@ -114,6 +114,7 @@ body {
 .header-section {
     position: relative;
     text-align: center;
+    padding: 0.6rem 1.25rem;
 }
 
 .theme-toggle-btn {
@@ -142,10 +143,10 @@ body {
 
 h1 {
     font-family: 'Outfit', sans-serif;
-    font-size: 2.25rem;
+    font-size: 1.6rem;
     font-weight: 800;
-    letter-spacing: -1px;
-    margin-bottom: 0.25rem;
+    letter-spacing: -0.5px;
+    margin-bottom: 0.1rem;
 }
 
 /* Gradient text — uses accent vars which already adapt to light/dark */
@@ -160,7 +161,7 @@ h1 {
 
 .subtitle {
     color: var(--text-secondary);
-    font-size: 1.15rem;
+    font-size: 0.9rem;
     font-weight: 500;
     opacity: 0.9;
 }
@@ -168,7 +169,7 @@ h1 {
 .mode-toggle-container {
     display: flex;
     justify-content: center;
-    margin-bottom: 1rem;
+    margin-bottom: 0.5rem;
 }
 
 .mode-switch {
@@ -981,7 +982,7 @@ input:checked+.slider:before {
 }
 
 .hidden {
-    display: none;
+    display: none !important;
 }
 
 .footer {
