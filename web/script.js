@@ -66,6 +66,48 @@ let legendFadeKey = null;   // Key that was hovered when fade-out started
 let legendFadeAlpha = 1;    // Current alpha for non-matching items during fade (0.12 → 1)
 let legendFadeRAF = null;
 let lastEvalTab = 'input'; // Remembered across mode switches
+let lastGenerateView = 'truth'; // Remembered when switching to evaluate and back
+
+// Viewport state (zoom/pan)
+let vpZoom = 1;
+let vpPanX = 0, vpPanY = 0;
+let vpDragStart = null;
+let vpTouchState = null;
+let vpLastPinchDist = 0, vpLastPinchCx = 0, vpLastPinchCy = 0;
+
+function resetViewport() { vpZoom = 1; vpPanX = 0; vpPanY = 0; }
+
+// Recent seeds (last 5, localStorage-persisted)
+let recentSeeds = JSON.parse(localStorage.getItem('dd2419_recent_seeds') || '[]');
+
+// --- SETTINGS PERSISTENCE ---
+function saveSettings() {
+    localStorage.setItem('dd2419_settings', JSON.stringify({
+        knownObjects:       document.getElementById('knownObjects').value,
+        unknownObjects:     document.getElementById('unknownObjects').value,
+        knownBoxes:         document.getElementById('knownBoxes').value,
+        unknownBoxes:       document.getElementById('unknownBoxes').value,
+        obstaclesCount:     document.getElementById('obstaclesCount').value,
+        transformWorkspace: document.getElementById('transformWorkspace').checked,
+    }));
+}
+function loadSettings() {
+    try {
+        const s = JSON.parse(localStorage.getItem('dd2419_settings') || 'null');
+        if (!s) return;
+        if (s.knownObjects   != null) document.getElementById('knownObjects').value = s.knownObjects;
+        if (s.unknownObjects != null) document.getElementById('unknownObjects').value = s.unknownObjects;
+        if (s.knownBoxes     != null) document.getElementById('knownBoxes').value = s.knownBoxes;
+        if (s.unknownBoxes   != null) document.getElementById('unknownBoxes').value = s.unknownBoxes;
+        if (s.obstaclesCount != null) document.getElementById('obstaclesCount').value = s.obstaclesCount;
+        if (s.transformWorkspace != null) document.getElementById('transformWorkspace').checked = s.transformWorkspace;
+    } catch (e) {}
+}
+
+// Evaluation history (session)
+let evalHistory = [];
+
+let hoverWorldCoords = null; // {x, y} in world cm, updated on mousemove
 
 function startLegendFade() {
     if (legendFadeRAF) cancelAnimationFrame(legendFadeRAF);
@@ -86,9 +128,114 @@ let hoverMouse = { x: 0, y: 0 }; // Mouse position relative to canvas element (C
 const layerVisible = {}; // false = hidden, undefined/true = visible
 const vis = (key) => layerVisible[key] !== false;
 
+// --- RECENT SEEDS ---
+function pushRecentSeed(fullSeed) {
+    recentSeeds = [fullSeed, ...recentSeeds.filter(s => s !== fullSeed)].slice(0, 5);
+    localStorage.setItem('dd2419_recent_seeds', JSON.stringify(recentSeeds));
+    renderRecentSeeds();
+}
+
+function renderRecentSeeds() {
+    const el = document.getElementById('recentSeedsList');
+    const wrap = document.getElementById('recentSeedsWrap');
+    if (!el || !wrap) return;
+    wrap.classList.toggle('hidden', recentSeeds.length === 0);
+    el.innerHTML = '';
+    recentSeeds.forEach(seed => {
+        const btn = document.createElement('button');
+        btn.className = 'recent-seed-btn';
+        btn.textContent = seed;
+        btn.title = 'Load this seed';
+        btn.addEventListener('click', () => {
+            const p = seed.split('_').map(Number);
+            if (p.length !== 7) return;
+            const seedInputEl = document.getElementById('seedInput');
+            const prevSeed = seedInputEl.value; // remember what the user had before
+            document.getElementById('knownObjects').value = p[0];
+            document.getElementById('unknownObjects').value = p[1];
+            document.getElementById('knownBoxes').value = p[2];
+            document.getElementById('unknownBoxes').value = p[3];
+            document.getElementById('obstaclesCount').value = p[4];
+            document.getElementById('transformWorkspace').checked = !!p[5];
+            seedInputEl.value = p[6]; // needed so generateTask uses this seed
+            generateTask();
+            seedInputEl.value = prevSeed; // restore original value
+        });
+        el.appendChild(btn);
+    });
+}
+
+// --- EVAL HISTORY ---
+function pushEvalHistory(seed, verdict) {
+    const s = evaluationResult?.stats;
+    if (!s) return;
+    evalHistory.unshift({ seed, verdict, kO: `${s.knownObjMatched}/${s.knownObjTotal}`, kB: `${s.knownBoxMatched}/${s.knownBoxTotal}`, dO: s.unknownObjMatched, dB: s.unknownBoxMatched, pO: s.penaltyObjs, pB: s.penaltyBoxes, time: new Date().toLocaleTimeString() });
+    if (evalHistory.length > 20) evalHistory.pop();
+    renderEvalHistory();
+}
+
+function renderEvalHistory() {
+    const el = document.getElementById('evalHistoryList');
+    const wrap = document.getElementById('evalHistoryWrap');
+    if (!el || !wrap) return;
+    wrap.classList.toggle('hidden', evalHistory.length < 2);
+    el.innerHTML = '';
+    evalHistory.forEach((h, i) => {
+        const div = document.createElement('div');
+        div.className = 'history-item' + (i === 0 ? ' history-item--current' : '');
+        div.title = 'Click to copy seed';
+        div.innerHTML =
+            `<span class="history-seed">${h.seed}</span>` +
+            `<span class="history-verdict history-verdict--${h.verdict.split(' ')[0].toLowerCase()}">${h.verdict}</span>` +
+            `<span class="history-time">${h.time}</span>`;
+        const seedSpan = div.querySelector('.history-seed');
+        const orig = h.seed;
+        let copyTimer = null;
+        div.addEventListener('click', () => {
+            navigator.clipboard.writeText(h.seed).catch(() => {});
+            seedSpan.textContent = 'Copied!';
+            clearTimeout(copyTimer);
+            copyTimer = setTimeout(() => { seedSpan.textContent = orig; }, 1500);
+        });
+        el.appendChild(div);
+    });
+}
+
+// --- COPY RESULTS ---
+function copyResultsToClipboard() {
+    if (!evaluationResult) return;
+    const s = evaluationResult.stats;
+    const minDiscObj = getMinDiscObj(), minDiscBox = getMinDiscBox();
+    const missingMaintained = s.knownTotal - s.knownMatched;
+    const effObj = s.unknownObjMatched - s.penaltyObjs;
+    const effBox = s.unknownBoxMatched - s.penaltyBoxes;
+    const perfect = s.knownMatched === s.knownTotal && s.unknownMatched === s.unknownTotal && s.penaltyObjs === 0 && s.penaltyBoxes === 0;
+    const accepted = effObj >= minDiscObj && effBox >= minDiscBox;
+    const verdict = perfect ? 'Perfect' : missingMaintained > 0 ? 'Failed (missing maintained)' : accepted ? 'Accepted' : 'Failed';
+    const seed = document.getElementById('seedExtractedValue')?.textContent.trim() || document.getElementById('evalSeedInput')?.value.trim() || 'unknown';
+    const avgErr = evaluationResult.matches.length ? (evaluationResult.matches.reduce((a, m) => a + m.dist, 0) / evaluationResult.matches.length).toFixed(1) : 'N/A';
+    const text = [
+        `DD2419 Evaluation — ${seed}`,
+        `Verdict: ${verdict}`,
+        ``,
+        `Maintained Obj:  ${s.knownObjMatched}/${s.knownObjTotal}`,
+        `Maintained Box:  ${s.knownBoxMatched}/${s.knownBoxTotal}`,
+        `Discovered Obj:  ${s.unknownObjMatched}  (−${s.penaltyObjs} pen → ${effObj} net, need ≥${minDiscObj})`,
+        `Discovered Box:  ${s.unknownBoxMatched}  (−${s.penaltyBoxes} pen → ${effBox} net, need ≥${minDiscBox})`,
+        `Avg match error: ${avgErr} cm  (threshold ${getThreshold()} cm)`,
+    ].join('\n');
+    navigator.clipboard.writeText(text).then(() => {
+        const btn = document.getElementById('copySummaryBtn');
+        if (btn) {
+            btn.classList.add('copied');
+            setTimeout(() => btn.classList.remove('copied'), 1800);
+        }
+    }).catch(() => {});
+}
+
 function getThreshold() { return Math.max(0, parseInt(document.getElementById('evalThreshold')?.value) || 20); }
-function getMinDiscObj() { return Math.max(0, parseInt(document.getElementById('minDiscObj')?.value) || 2); }
-function getMinDiscBox() { return Math.max(0, parseInt(document.getElementById('minDiscBox')?.value) || 1); }
+function getMinDiscObj() { const v = parseInt(document.getElementById('minDiscObj')?.value); return isNaN(v) ? 2 : Math.max(0, v); }
+function getMinDiscBox() { const v = parseInt(document.getElementById('minDiscBox')?.value); return isNaN(v) ? 1 : Math.max(0, v); }
 
 function getHoverNearestDist(item) {
     if (!evaluationResult || !evalData) return null;
@@ -299,13 +446,14 @@ function switchMode(mode) {
         tabs[0].textContent = 'Ground Truth'; tabs[0].dataset.tab = 'truth';
         tabs[1].textContent = 'Known'; tabs[1].dataset.tab = 'known';
         tabs[2].textContent = 'Placement Guide'; tabs[2].dataset.tab = 'placement';
-        if (currentView === 'all') currentView = 'truth';
+        currentView = lastGenerateView;
         document.getElementById('downloads').classList.toggle('hidden', !currentTask);
         ['btnDLWorkspace', 'btnDLMap', 'btnDLGT'].forEach(id => document.getElementById(id).style.display = '');
         tabSeedBadge.classList.toggle('hidden', !currentTask);
         tabs.forEach(t => t.classList.toggle('active', t.dataset.tab === currentView));
     } else {
         tabsEl.classList.add('hidden');
+        lastGenerateView = currentView;
         currentView = 'all';
         document.getElementById('downloads').classList.add('hidden');
         ['btnDLWorkspace', 'btnDLMap', 'btnDLGT'].forEach(id => document.getElementById(id).style.display = 'none');
@@ -341,13 +489,15 @@ function generateTask() {
     document.getElementById('displaySeed').textContent = fullSeed;
     document.getElementById('tabSeedBadge').classList.remove('hidden');
 
-    // Clear input only when auto-generated so next click generates a fresh random map
-    if (isAuto) seedInputEl.value = "";
+    seedInputEl.value = "";
 
     currentTask = recreateTask(params.nkO, params.nuO, params.nkB, params.nuB, params.nObs, !!params.doTrans);
     document.getElementById('downloads').classList.remove('hidden');
     updateSaveTooltips();
+    resetViewport();
+    history.replaceState(null, '', '#' + fullSeed);
     draw();
+    pushRecentSeed(fullSeed);
 }
 
 function updateSaveTooltips() {
@@ -551,13 +701,14 @@ function performEvaluation(workspace, gt, solution, switchToResults = true) {
         }
     };
 
-    displayResults();
+    resetViewport();
+    displayResults(switchToResults);
     if (switchToResults) switchEvalSidebarTab('results');
     else if (lastEvalTab === 'results') buildResultsPanel();
     draw();
 }
 
-function displayResults() {
+function displayResults(addToHistory = false) {
     const resDiv = document.getElementById('evaluationResults');
     const s = evaluationResult.stats;
     resDiv.classList.remove('hidden');
@@ -648,6 +799,11 @@ function displayResults() {
             <div class="verdict-tooltip">${tooltipHtml}</div>
         </div>
     `;
+
+    if (addToHistory) {
+        const seed = document.getElementById('seedExtractedValue')?.textContent.trim() || document.getElementById('evalSeedInput')?.value.trim() || 'unknown';
+        pushEvalHistory(seed, verdictText);
+    }
 }
 
 function buildResultsPanel() {
@@ -851,6 +1007,21 @@ function draw() {
 
     ctx.clearRect(0, 0, W, H);
 
+    // Draw split-view divider and labels OUTSIDE the viewport transform (they stay fixed)
+    if (isSplit) {
+        ctx.strokeStyle = borderProminent; ctx.lineWidth = 1;
+        ctx.beginPath(); ctx.moveTo(W / 2, 0); ctx.lineTo(W / 2, H); ctx.stroke();
+        ctx.fillStyle = textColor; ctx.font = 'bold 16px Inter'; ctx.textAlign = 'center';
+        ctx.fillText('GROUND TRUTH', W / 4, 30);
+        ctx.fillText('SOLUTION', 3 * W / 4, 30);
+    }
+
+    // Apply viewport transform for all world content
+    ctx.save();
+    ctx.translate(W / 2 + vpPanX, H / 2 + vpPanY);
+    ctx.scale(vpZoom, vpZoom);
+    ctx.translate(-W / 2, -H / 2);
+
     const drawWorld = (toX, worldData, isGT = true) => {
         // Grid — uniform thin lines every 100 cm, labels every 500 cm
         const fontSize = Math.max(9, Math.min(13, 11 * scale));
@@ -923,7 +1094,7 @@ function draw() {
             ctx.globalAlpha = alphaFor('start');
             ctx.save(); ctx.translate(toX(sp.x), toY(sp.y)); ctx.rotate(-(sp.angle * Math.PI / 180));
             ctx.strokeStyle = startColor; ctx.fillStyle = startColor; ctx.lineWidth = 2;
-            ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(25, 0); ctx.stroke();
+            ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(15, 0); ctx.stroke();
             ctx.beginPath(); ctx.moveTo(25, 0); ctx.lineTo(15, -5); ctx.lineTo(15, 5); ctx.fill(); ctx.restore();
             ctx.globalAlpha = 1;
         }
@@ -971,7 +1142,24 @@ function draw() {
                     const matchedGT = new Set(evaluationResult.matches.map(m => m.gt));
                     if (vis('maintained')) { ctx.globalAlpha = alphaFor('maintained'); worldData.gt.known.filter(i => matchedGT.has(i)).forEach(i => drawItem(i, i.Type, matchKnown)); ctx.globalAlpha = 1; }
                     if (vis('discovered')) { ctx.globalAlpha = alphaFor('discovered'); worldData.gt.unknown.filter(i => matchedGT.has(i)).forEach(i => drawItem(i, i.Type, matchUnknown)); ctx.globalAlpha = 1; }
-                    if (vis('missing')) { ctx.globalAlpha = alphaFor('missing');[...worldData.gt.known, ...worldData.gt.unknown].filter(i => !matchedGT.has(i)).forEach(i => drawItem(i, i.Type, missingColor)); ctx.globalAlpha = 1; }
+                    if (vis('missing')) {
+                        ctx.globalAlpha = alphaFor('missing');
+                        // Unknown-GT missing: amber
+                        worldData.gt.unknown.filter(i => !matchedGT.has(i)).forEach(i => drawItem(i, i.Type, missingColor));
+                        // Known-GT missing: red (auto-fail) + dashed warning ring
+                        const missingKnown = worldData.gt.known.filter(i => !matchedGT.has(i));
+                        missingKnown.forEach(i => {
+                            drawItem(i, i.Type, penaltyColor);
+                            const ix = toX(i.x), iy = toY(i.y);
+                            const ringR = Math.max(10, 14 * scale);
+                            ctx.strokeStyle = penaltyColor; ctx.lineWidth = 1.5;
+                            ctx.globalAlpha = alphaFor('missing') * 0.7;
+                            ctx.setLineDash([4, 3]);
+                            ctx.beginPath(); ctx.arc(ix, iy, ringR, 0, Math.PI * 2); ctx.stroke();
+                            ctx.setLineDash([]);
+                        });
+                        ctx.globalAlpha = 1;
+                    }
                 } else {
                     worldData.gt.known.forEach(i => drawItem(i, i.Type, matchKnown));
                     worldData.gt.unknown.forEach(i => drawItem(i, i.Type, matchUnknown));
@@ -997,15 +1185,6 @@ function draw() {
     if (!isSplit) {
         drawWorld(getToX(false), data, currentView !== 'sol');
     } else {
-        // Divider
-        ctx.strokeStyle = borderProminent; ctx.lineWidth = 1;
-        ctx.beginPath(); ctx.moveTo(W / 2, 0); ctx.lineTo(W / 2, H); ctx.stroke();
-
-        // Labels
-        ctx.fillStyle = textColor; ctx.font = 'bold 16px Inter'; ctx.textAlign = 'center';
-        ctx.fillText('GROUND TRUTH', W / 4, 30);
-        ctx.fillText('SOLUTION', 3 * W / 4, 30);
-
         const toXLeft = getToX(false);
         const toXRight = getToX(true);
         drawWorld(toXLeft, data, true);
@@ -1092,6 +1271,25 @@ function draw() {
             }
         }
     }
+    ctx.restore(); // end viewport transform
+
+    // Cursor world-coordinates readout (bottom-left corner)
+    if (hoverWorldCoords) {
+        const text = `${hoverWorldCoords.x.toFixed(1)}, ${hoverWorldCoords.y.toFixed(1)} cm`;
+        ctx.save();
+        ctx.font = '11px Inter, system-ui, sans-serif';
+        const tw = ctx.measureText(text).width;
+        const pad = 5, bx = 10, by = H - 30;
+        ctx.fillStyle = 'rgba(0,0,0,0.5)';
+        ctx.beginPath();
+        ctx.roundRect(bx - pad, by - pad, tw + pad * 2, 20, 4);
+        ctx.fill();
+        ctx.fillStyle = 'rgba(255,255,255,0.92)';
+        ctx.fillText(text, bx, by + 11);
+        ctx.restore();
+    }
+
+    document.getElementById('btnResetViewport')?.classList.toggle('hidden', vpZoom === 1 && vpPanX === 0 && vpPanY === 0);
     updateHoverTooltip();
     updateLegend();
 }
@@ -1156,7 +1354,10 @@ function updateLegend() {
     const un = { n: 'Unused', key: 'unused', c: getC('--viz-unused'), h: true };
     const mnt = { n: 'Maintained', key: 'maintained', c: getC('--viz-match-known') };
     const dsc = { n: 'Discovered', key: 'discovered', c: getC('--viz-match-unknown') };
-    const mis = { n: 'Missing', key: 'missing', c: getC('--viz-missing') };
+    const hasMissingKnown = evaluationResult && evalData && (() => { const m = new Set(evaluationResult.matches.map(x => x.gt)); return evalData.gt.known.some(i => !m.has(i)); })();
+    const mis = hasMissingKnown
+        ? { n: 'Known Missing', key: 'missing', c: getC('--viz-penalty') }
+        : { n: 'Missing', key: 'missing', c: getC('--viz-missing') };
     const pen = { n: 'Penalty', key: 'penalty', c: getC('--viz-penalty') };
     const lmnt = { n: 'Maintained match', key: 'matched_maintained', c: getC('--viz-match-known'), d: true };
     const ldsc = { n: 'Discovered match', key: 'matched_discovered', c: getC('--viz-match-unknown'), d: true };
@@ -1302,19 +1503,18 @@ function generateSVGContent(viewOverride) {
 }
 
 function downloadSVG() {
+    if (currentMode === 'evaluate') { downloadEvalSVG(); return; }
     const svgString = _buildSVGString();
     if (!svgString) return;
-    const typeMap = { truth: 'gt', known: 'known', placement: 'placement_guide', all: 'eval', gt: 'gt', sol: 'solution' };
+    const typeMap = { truth: 'gt', known: 'known', placement: 'placement_guide' };
     const viewType = typeMap[currentView] || currentView;
     const t = currentTask;
-    const evalSeed = document.getElementById('seedExtractedValue')?.textContent.trim() || document.getElementById('evalSeedInput')?.value.trim();
     const fullSeed = t
         ? `${t.params.nkO}_${t.params.nuO}_${t.params.nkB}_${t.params.nuB}_${t.params.nObs}_${t.params.doTrans ? 1 : 0}_${t.seed}`
-        : (evalSeed || 'eval');
-    const fileName = `${fullSeed}_${viewType}`;
+        : 'unknown';
     const blob = new Blob([svgString], { type: 'image/svg+xml' });
     const url = URL.createObjectURL(blob);
-    const a = document.createElement('a'); a.href = url; a.download = `${fileName}.svg`; a.click();
+    const a = document.createElement('a'); a.href = url; a.download = `${fullSeed}_${viewType}.svg`; a.click();
 }
 
 function downloadEvalSVG() {
@@ -1429,7 +1629,7 @@ function _buildSVGString() {
             if (sp) {
                 const { cx, cy } = map(sp.x, sp.y, xShift);
                 const dispAngle = -sp.angle;
-                svg += `<g transform="translate(${cx},${cy}) rotate(${dispAngle})"><line x1="0" y1="0" x2="25" y2="0" stroke="${startColor}" stroke-width="2" /><polygon points="25,0 15,-5 15,5" fill="${startColor}" /></g>`;
+                svg += `<g transform="translate(${cx},${cy}) rotate(${dispAngle})"><line x1="0" y1="0" x2="15" y2="0" stroke="${startColor}" stroke-width="2" /><polygon points="25,0 15,-5 15,5" fill="${startColor}" /></g>`;
             }
         }
 
@@ -1470,7 +1670,10 @@ function _buildSVGString() {
                     const matchedGT = new Set(evaluationResult.matches.map(m => m.gt));
                     if (vis('maintained')) worldData.gt.known.filter(i => matchedGT.has(i)).forEach(i => addIcon(i, i.Type, matchKnown));
                     if (vis('discovered')) worldData.gt.unknown.filter(i => matchedGT.has(i)).forEach(i => addIcon(i, i.Type, matchUnknown));
-                    if (vis('missing')) [...worldData.gt.known, ...worldData.gt.unknown].filter(i => !matchedGT.has(i)).forEach(i => addIcon(i, i.Type, missingColor));
+                    if (vis('missing')) {
+                        worldData.gt.unknown.filter(i => !matchedGT.has(i)).forEach(i => addIcon(i, i.Type, missingColor));
+                        worldData.gt.known.filter(i => !matchedGT.has(i)).forEach(i => addIcon(i, i.Type, penaltyColor));
+                    }
                 } else {
                     worldData.gt.known.forEach(i => addIcon(i, i.Type, matchKnown));
                     worldData.gt.unknown.forEach(i => addIcon(i, i.Type, matchUnknown));
@@ -1615,7 +1818,10 @@ function _buildSVGString() {
         if (currentView !== 'sol') {
             addLegendItem('Maintained', matchKnown, 'filled');
             addLegendItem('Discovered', matchUnknown, 'filled');
-            addLegendItem('Missing', missingColor, 'filled');
+            const svgHasMissingKnown = evaluationResult && data && (() => { const m = new Set(evaluationResult.matches.map(x => x.gt)); return data.gt.known.some(i => !m.has(i)); })();
+            if (svgHasMissingKnown) addLegendItem('Known Missing', penaltyColor, 'filled');
+            const svgHasMissingUnknown = evaluationResult && data && (() => { const m = new Set(evaluationResult.matches.map(x => x.gt)); return data.gt.unknown.some(i => !m.has(i)); })();
+            if (!evaluationResult || svgHasMissingUnknown) addLegendItem('Missing', missingColor, 'filled');
         }
         if (currentView !== 'gt') {
             if (currentView === 'sol') {
@@ -1685,17 +1891,23 @@ function _buildSVGString() {
             lpText(lrx, lpy, `${m.dist.toFixed(1)} cm`, { fill: matchUnknown, size: 10, anchor: 'end' });
         });
 
-        lpSection('Missing', missingColor, missingL.sort((a, b) => {
+        const knownGTSetMiss = new Set(evalData.gt.known);
+        const missingKnownL = missingL.filter(i => knownGTSetMiss.has(i));
+        const missingUnknownL = missingL.filter(i => !knownGTSetMiss.has(i));
+        const sortMissing = arr => arr.sort((a, b) => {
             const nearA = penaltyL.length ? Math.min(...penaltyL.map(s => dist2L(a, s))) : Infinity;
             const nearB = penaltyL.length ? Math.min(...penaltyL.map(s => dist2L(b, s))) : Infinity;
             return nearA - nearB;
-        }), (item) => {
+        });
+        const makeMissingRow = (color) => (item) => {
             const near = penaltyL.length ? Math.min(...penaltyL.map(s => dist2L(item, s))) : null;
             const typeL = item.Type === 'B' ? 'B' : 'O';
-            lpText(lp, lpy, typeL, { fill: missingColor, size: 9, weight: 'bold' });
+            lpText(lp, lpy, typeL, { fill: color, size: 9, weight: 'bold' });
             lpText(lp + 14, lpy, lpXY(item), { size: 10 });
-            if (near !== null) lpText(lrx, lpy, `${near.toFixed(1)} cm`, { fill: missingColor, size: 10, anchor: 'end' });
-        });
+            if (near !== null) lpText(lrx, lpy, `${near.toFixed(1)} cm`, { fill: color, size: 10, anchor: 'end' });
+        };
+        lpSection('Known Missing', penaltyColor, sortMissing(missingKnownL), makeMissingRow(penaltyColor));
+        lpSection('Missing', missingColor, sortMissing(missingUnknownL), makeMissingRow(missingColor));
 
         lpSection('Penalty', penaltyColor, penaltyL.sort((a, b) => {
             const nearA = missingL.length ? Math.min(...missingL.map(g => dist2L(a, g))) : Infinity;
@@ -1792,11 +2004,13 @@ function wrapNumberInputs() {
 }
 
 window.onload = () => {
+    loadSettings();
+
     document.querySelectorAll('.mode-btn').forEach(b => b.onclick = () => switchMode(b.dataset.mode));
     document.querySelectorAll('.eval-sidebar-tab').forEach(b => b.onclick = () => switchEvalSidebarTab(b.dataset.panel));
     document.querySelectorAll('.tab-btn[data-tab]').forEach(b => b.onclick = () => {
         document.querySelectorAll('.tab-btn[data-tab]').forEach(t => t.classList.remove('active'));
-        b.classList.add('active'); currentView = b.dataset.tab; draw();
+        b.classList.add('active'); currentView = b.dataset.tab; if (currentMode === 'generate') lastGenerateView = currentView; draw();
     });
     document.getElementById('generateBtn').onclick = () => generateTask();
     document.getElementById('runEvalBtn').onclick = runEvaluation;
@@ -1804,6 +2018,28 @@ window.onload = () => {
     document.getElementById('runSeedEvalBtn2')?.addEventListener('click', runSeedEvaluation);
     document.getElementById('copySeedBtn').onclick = copySeed;
     document.getElementById('displaySeed').onclick = copySeed;
+
+    // QR code modal
+    document.getElementById('qrSeedBtn')?.addEventListener('click', () => {
+        const url = window.location.href;
+        const container = document.getElementById('qrCodeContainer');
+        const modal = document.getElementById('qrModal');
+        container.innerHTML = '';
+        if (typeof QRCode !== 'undefined') {
+            new QRCode(container, { text: url, width: 200, height: 200, colorDark: '#000000', colorLight: '#ffffff' });
+        } else {
+            container.textContent = url;
+        }
+        document.getElementById('qrUrlText').textContent = url;
+        modal.classList.remove('hidden');
+    });
+    document.getElementById('qrModalClose')?.addEventListener('click', () => document.getElementById('qrModal').classList.add('hidden'));
+    document.getElementById('qrModal')?.addEventListener('click', e => { if (e.target === e.currentTarget) e.currentTarget.classList.add('hidden'); });
+
+    // Keyboard shortcuts modal
+    document.getElementById('shortcutsBtn')?.addEventListener('click', () => document.getElementById('shortcutsModal').classList.toggle('hidden'));
+    document.getElementById('shortcutsModalClose')?.addEventListener('click', () => document.getElementById('shortcutsModal').classList.add('hidden'));
+    document.getElementById('shortcutsModal')?.addEventListener('click', e => { if (e.target === e.currentTarget) e.currentTarget.classList.add('hidden'); });
 
     // Keep object/box known+unknown totals within pool size.
     // The changed field has priority: keep its value if achievable, then adjust the other.
@@ -1824,10 +2060,12 @@ window.onload = () => {
         if (+otherEl.value > remaining) otherEl.value = Math.max(otherMin, remaining);
     }
 
-    nkOEl.addEventListener('change', () => syncPair(nkOEl, nuOEl, OBJECTS.length));
-    nuOEl.addEventListener('change', () => syncPair(nuOEl, nkOEl, OBJECTS.length));
-    nkBEl.addEventListener('change', () => syncPair(nkBEl, nuBEl, BOXES.length));
-    nuBEl.addEventListener('change', () => syncPair(nuBEl, nkBEl, BOXES.length));
+    nkOEl.addEventListener('change', () => { syncPair(nkOEl, nuOEl, OBJECTS.length); saveSettings(); });
+    nuOEl.addEventListener('change', () => { syncPair(nuOEl, nkOEl, OBJECTS.length); saveSettings(); });
+    nkBEl.addEventListener('change', () => { syncPair(nkBEl, nuBEl, BOXES.length); saveSettings(); });
+    nuBEl.addEventListener('change', () => { syncPair(nuBEl, nkBEl, BOXES.length); saveSettings(); });
+    document.getElementById('obstaclesCount')?.addEventListener('change', saveSettings);
+    document.getElementById('transformWorkspace')?.addEventListener('change', saveSettings);
 
     document.getElementById('seedInput').addEventListener('change', function () {
         if (parseInt(this.value) === 0) this.value = '';
@@ -1843,7 +2081,7 @@ window.onload = () => {
 
     ['minDiscObj', 'minDiscBox'].forEach(id => {
         document.getElementById(id)?.addEventListener('input', () => {
-            if (evaluationResult) displayResults();
+            if (evaluationResult) { displayResults(); draw(); }
         });
     });
 
@@ -1927,10 +2165,13 @@ window.onload = () => {
 
     document.getElementById('mapCanvas').onmouseleave = () => {
         hoverItem = null;
+        hoverWorldCoords = null;
         document.getElementById('mapTooltip').classList.add('hidden');
         draw();
     };
     document.getElementById('mapCanvas').onmousemove = (e) => {
+        if (vpDragStart) return; // Don't update hover during drag pan
+
         const canvas = e.target;
         const rect = canvas.getBoundingClientRect();
         const x = e.clientX - rect.left;
@@ -1941,7 +2182,7 @@ window.onload = () => {
         hoverMouse = { x: e.clientX - containerRect.left, y: e.clientY - containerRect.top };
 
         const data = currentMode === 'generate' ? (currentTask ? (currentView === 'placement' ? currentTask.base : currentTask.transformed) : null) : evalData;
-        if (!data) return;
+        if (!data) { hoverWorldCoords = null; return; }
 
         const ws = data.workspace;
         const minX = Math.min(...ws.map(p => p.x)), maxX = Math.max(...ws.map(p => p.x)), minY = Math.min(...ws.map(p => p.y)), maxY = Math.max(...ws.map(p => p.y));
@@ -1959,10 +2200,18 @@ window.onload = () => {
         const scaleX = canvas.width / rect.width;
         const scaleY = canvas.height / rect.height;
         const cx = x * scaleX, cy = y * scaleY;
+
+        // Un-apply viewport transform for hit testing
+        const pivotXdpr = canvas.width / 2;
+        const pivotYdpr = canvas.height / 2;
+        const ucx = (cx - pivotXdpr - vpPanX * scaleX) / vpZoom + pivotXdpr;
+        const ucy = (cy - pivotYdpr - vpPanY * scaleY) / vpZoom + pivotYdpr;
+
         // In split view strip the right-panel x-shift so both halves share the same world coords
-        const panelCx = isSplit ? cx % (canvas.width / 2) : cx;
+        const panelCx = isSplit ? ucx % (canvas.width / 2) : ucx;
         const tx = ((panelCx - offX) / scale) + minX - pad;
-        const ty = maxY - ((cy - offY) / scale) + pad;
+        const ty = maxY - ((ucy - offY) / scale) + pad;
+        hoverWorldCoords = { x: tx, y: ty };
 
         let all = [];
         if (currentMode === 'generate') {
@@ -2016,7 +2265,7 @@ window.onload = () => {
                 if (matchedByUnknown.has(i)) return `Discovered ${t}`;
                 return `Penalty ${t}`;
             };
-            const mouseIsRight = isSplit && cx > canvas.width / 2;
+            const mouseIsRight = isSplit && ucx > canvas.width / 2;
             all = [
                 { ...data.gt.start, _label: 'Start Pose', _side: 'both' },
                 ...[...data.gt.known, ...data.gt.unknown].map(i => ({ ...i, _label: gtLabel(i), _ref: i, _side: 'left' })),
@@ -2032,14 +2281,16 @@ window.onload = () => {
         let near = null, minDist = hitRadius;
         all.forEach(i => { if (!i) return; const d = Math.sqrt((i.x - tx) ** 2 + (i.y - ty) ** 2); if (d < minDist) { minDist = d; near = i; } });
 
-        // Match-line hit detection in canvas space (lines span both panels)
+        // Match-line hit detection in canvas space (lines span both panels, transform-aware)
         let nearMatch = null;
         if (!near && isSplit && evaluationResult) {
             const knownGTSetHit = new Set(evalData.gt.known);
             const offX_left = offX;
-            const canvasXL = wx => offX_left + (wx - minX + pad) * scale;
-            const canvasXR = wx => offX_left + canvas.width / 2 + (wx - minX + pad) * scale;
-            const canvasYc = wy => offY + (maxY - wy + pad) * scale;
+            const _vx = bx => vpZoom * (bx - pivotXdpr) + pivotXdpr + vpPanX * scaleX;
+            const _vy = by => vpZoom * (by - pivotYdpr) + pivotYdpr + vpPanY * scaleY;
+            const canvasXL = wx => _vx(offX_left + (wx - minX + pad) * scale);
+            const canvasXR = wx => _vx(offX_left + canvas.width / 2 + (wx - minX + pad) * scale);
+            const canvasYc = wy => _vy(offY + (maxY - wy + pad) * scale);
             const lineHitPx = 8;
             let minLineDist = lineHitPx;
             evaluationResult.matches.forEach(m => {
@@ -2067,4 +2318,147 @@ window.onload = () => {
     const themeMediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
     themeMediaQuery.addEventListener('change', draw);
     switchMode('generate');
+
+    // --- VIEWPORT ZOOM/PAN HANDLERS ---
+    const mapCanvas = document.getElementById('mapCanvas');
+
+    // Wheel zoom (zoom toward cursor)
+    mapCanvas.addEventListener('wheel', (e) => {
+        e.preventDefault();
+        const rect = e.target.getBoundingClientRect();
+        const mx = e.clientX - rect.left, my = e.clientY - rect.top;
+        const factor = e.deltaY < 0 ? 1.15 : 1 / 1.15;
+        const newZoom = Math.max(0.3, Math.min(10, vpZoom * factor));
+        const af = newZoom / vpZoom;
+        const pivX = rect.width / 2, pivY = rect.height / 2;
+        vpPanX += (mx - pivX - vpPanX) * (1 - af);
+        vpPanY += (my - pivY - vpPanY) * (1 - af);
+        vpZoom = newZoom;
+        draw();
+    }, { passive: false });
+
+    // Drag pan
+    mapCanvas.addEventListener('mousedown', (e) => {
+        if (e.button !== 0) return;
+        vpDragStart = { x: e.clientX, y: e.clientY, panX: vpPanX, panY: vpPanY };
+        mapCanvas.style.cursor = 'grabbing';
+    });
+    window.addEventListener('mousemove', (e) => {
+        if (!vpDragStart) return;
+        vpPanX = vpDragStart.panX + (e.clientX - vpDragStart.x);
+        vpPanY = vpDragStart.panY + (e.clientY - vpDragStart.y);
+        draw();
+    });
+    window.addEventListener('mouseup', () => {
+        if (vpDragStart) { vpDragStart = null; mapCanvas.style.cursor = ''; }
+    });
+
+    // Double-click to reset
+    mapCanvas.addEventListener('dblclick', () => { resetViewport(); draw(); });
+
+    // Touch pinch-to-zoom + single-finger pan
+    mapCanvas.addEventListener('touchstart', (e) => {
+        e.preventDefault();
+        if (e.touches.length === 2) {
+            vpTouchState = 'pinch';
+            const dx = e.touches[0].clientX - e.touches[1].clientX;
+            const dy = e.touches[0].clientY - e.touches[1].clientY;
+            vpLastPinchDist = Math.sqrt(dx*dx + dy*dy);
+            vpLastPinchCx = (e.touches[0].clientX + e.touches[1].clientX) / 2;
+            vpLastPinchCy = (e.touches[0].clientY + e.touches[1].clientY) / 2;
+        } else if (e.touches.length === 1) {
+            vpTouchState = 'pan';
+            vpDragStart = { x: e.touches[0].clientX, y: e.touches[0].clientY, panX: vpPanX, panY: vpPanY };
+        }
+    }, { passive: false });
+    mapCanvas.addEventListener('touchmove', (e) => {
+        e.preventDefault();
+        if (vpTouchState === 'pinch' && e.touches.length === 2) {
+            const dx = e.touches[0].clientX - e.touches[1].clientX;
+            const dy = e.touches[0].clientY - e.touches[1].clientY;
+            const newDist = Math.sqrt(dx*dx + dy*dy);
+            const newCx = (e.touches[0].clientX + e.touches[1].clientX) / 2;
+            const newCy = (e.touches[0].clientY + e.touches[1].clientY) / 2;
+            const factor = newDist / vpLastPinchDist;
+            const newZoom = Math.max(0.3, Math.min(10, vpZoom * factor));
+            const rect = e.target.getBoundingClientRect();
+            const mx = newCx - rect.left, my = newCy - rect.top;
+            const pivX = rect.width / 2, pivY = rect.height / 2;
+            vpPanX += (mx - pivX - vpPanX) * (1 - factor) + (newCx - vpLastPinchCx);
+            vpPanY += (my - pivY - vpPanY) * (1 - factor) + (newCy - vpLastPinchCy);
+            vpZoom = newZoom;
+            vpLastPinchDist = newDist; vpLastPinchCx = newCx; vpLastPinchCy = newCy;
+            draw();
+        } else if (vpTouchState === 'pan' && e.touches.length === 1 && vpDragStart) {
+            vpPanX = vpDragStart.panX + (e.touches[0].clientX - vpDragStart.x);
+            vpPanY = vpDragStart.panY + (e.touches[0].clientY - vpDragStart.y);
+            draw();
+        }
+    }, { passive: false });
+    mapCanvas.addEventListener('touchend', () => { vpTouchState = null; vpDragStart = null; });
+
+    // --- KEYBOARD SHORTCUTS ---
+    document.addEventListener('keydown', (e) => {
+        if (e.target.matches('input, textarea, select')) return;
+        switch (e.key) {
+            case 'g': case 'G':
+                if (currentMode === 'generate') generateTask();
+                else switchMode('generate');
+                break;
+            case 'e': case 'E':
+                switchMode('evaluate');
+                break;
+            case 'ArrowUp':
+                e.preventDefault();
+                switchMode('generate');
+                break;
+            case 'ArrowDown':
+                e.preventDefault();
+                switchMode('evaluate');
+                break;
+            case 'ArrowLeft': {
+                if (currentMode === 'generate') {
+                    const tabs = [...document.querySelectorAll('.tab-btn[data-tab]')];
+                    const idx = tabs.findIndex(t => t.classList.contains('active'));
+                    if (idx > 0) tabs[idx - 1].click();
+                }
+                break;
+            }
+            case 'ArrowRight': {
+                if (currentMode === 'generate') {
+                    const tabs = [...document.querySelectorAll('.tab-btn[data-tab]')];
+                    const idx = tabs.findIndex(t => t.classList.contains('active'));
+                    if (idx < tabs.length - 1) tabs[idx + 1].click();
+                }
+                break;
+            }
+            case 'r': case 'R':
+                resetViewport(); draw();
+                break;
+            case '?':
+                document.getElementById('shortcutsModal')?.classList.toggle('hidden');
+                break;
+            case 'Escape':
+                document.getElementById('shortcutsModal')?.classList.add('hidden');
+                document.getElementById('qrModal')?.classList.add('hidden');
+                break;
+        }
+    });
+
+    // --- RECENT SEEDS RENDER ---
+    renderRecentSeeds();
+
+    // --- URL HASH RESTORE ---
+    const hash = window.location.hash.slice(1);
+    if (/^\d+_\d+_\d+_\d+_\d+_\d+_\d+$/.test(hash)) {
+        const p = hash.split('_').map(Number);
+        document.getElementById('knownObjects').value = p[0];
+        document.getElementById('unknownObjects').value = p[1];
+        document.getElementById('knownBoxes').value = p[2];
+        document.getElementById('unknownBoxes').value = p[3];
+        document.getElementById('obstaclesCount').value = p[4];
+        document.getElementById('transformWorkspace').checked = !!p[5];
+        document.getElementById('seedInput').value = p[6];
+        generateTask();
+    }
 };
