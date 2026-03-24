@@ -108,6 +108,8 @@ function loadSettings() {
 let evalHistory = [];
 
 let hoverWorldCoords = null; // {x, y} in world cm, updated on mousemove
+let seedLocked = false;      // When true, seed input is frozen and reused every generate
+let showGrid = true;         // Toggle grid overlay on canvas
 
 function startLegendFade() {
     if (legendFadeRAF) cancelAnimationFrame(legendFadeRAF);
@@ -286,6 +288,40 @@ function setSeed(s) {
 }
 
 function getRand() { return prng ? prng() : Math.random(); }
+
+function toggleSeedLock() {
+    seedLocked = !seedLocked;
+    const btn = document.getElementById('lockSeedBtn');
+    const input = document.getElementById('seedInput');
+    if (seedLocked) {
+        // Capture numeric seed from displayed full seed, fall back to whatever is in input
+        const fullSeed = document.getElementById('displaySeed').textContent;
+        const match = fullSeed.match(/_(\d+)$/);
+        if (match) input.value = match[1];
+        input.disabled = true;
+        btn.classList.add('locked');
+        btn.title = 'Unlock seed (currently locked)';
+    } else {
+        input.disabled = false;
+        input.value = '';
+        input.placeholder = 'Auto-generate';
+        btn.classList.remove('locked');
+        btn.title = 'Lock current seed';
+    }
+}
+
+function copyCanvasToClipboard() {
+    const canvas = document.getElementById('mapCanvas');
+    canvas.toBlob(blob => {
+        navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })])
+            .then(() => {
+                const btn = document.getElementById('btnCopyCanvas');
+                btn.classList.add('copied');
+                setTimeout(() => btn.classList.remove('copied'), 1800);
+            })
+            .catch(() => {});
+    }, 'image/png');
+}
 
 function copySeed() {
     const seed = document.getElementById('displaySeed').textContent;
@@ -489,7 +525,8 @@ function generateTask() {
     document.getElementById('displaySeed').textContent = fullSeed;
     document.getElementById('tabSeedBadge').classList.remove('hidden');
 
-    seedInputEl.value = "";
+    if (!seedLocked) seedInputEl.value = "";
+    else { seedInputEl.value = String(randomSeed); } // keep locked value visible
 
     currentTask = recreateTask(params.nkO, params.nuO, params.nkB, params.nuB, params.nObs, !!params.doTrans);
     document.getElementById('downloads').classList.remove('hidden');
@@ -509,15 +546,24 @@ function updateSaveTooltips() {
 
 /** Recreates task data given parameters and an active PRNG */
 function recreateTask(nkO, nuO, nkB, nuB, nObs, doTrans) {
-    const startPose = sample(START_POSES, 1)[0];
-    const allObjs = sample(OBJECTS, nkO + nuO);
-    const knownObjs = allObjs.slice(0, nkO);
-    const unknownObjs = allObjs.slice(nkO);
+    // 1. Transform (first — stays stable when only counts change with a locked seed)
+    const translate = doTrans ? { x: randomInt(-500, 500), y: randomInt(-500, 500) } : { x: 0, y: 0 };
+    const angleRad = doTrans ? (getRand() * 2 * Math.PI) : 0;
 
+    // 2. Start pose
+    const startPose = sample(START_POSES, 1)[0];
+
+    // 3. Boxes
     const allBoxes = sample(BOXES, nkB + nuB);
     const knownBoxes = allBoxes.slice(0, nkB);
     const unknownBoxes = allBoxes.slice(nkB);
 
+    // 4. Objects
+    const allObjs = sample(OBJECTS, nkO + nuO);
+    const knownObjs = allObjs.slice(0, nkO);
+    const unknownObjs = allObjs.slice(nkO);
+
+    // 5. Obstacles (last — count can change freely)
     const obstacles = [];
     const forbidden = [startPose, ...allObjs, ...allBoxes];
     let attempts = 0;
@@ -528,9 +574,6 @@ function recreateTask(nkO, nuO, nkB, nuB, nObs, doTrans) {
         if (!tooClose) obstacles.push(obs);
         attempts++;
     }
-
-    const translate = doTrans ? { x: randomInt(-500, 500), y: randomInt(-500, 500) } : { x: 0, y: 0 };
-    const angleRad = doTrans ? (getRand() * 2 * Math.PI) : 0;
 
     const transform = (i) => applyTransform(i, translate, angleRad);
     const transformPoint = (p) => { const r = rotatePoint(p.x, p.y, angleRad); return { x: r.x + translate.x, y: r.y + translate.y }; };
@@ -800,6 +843,12 @@ function displayResults(addToHistory = false) {
         </div>
     `;
 
+    // Trigger verdict animation
+    requestAnimationFrame(() => {
+        const vEl = resDiv.querySelector('.verdict-box');
+        if (vEl) { vEl.classList.remove('verdict-pulse'); void vEl.offsetWidth; vEl.classList.add('verdict-pulse'); }
+    });
+
     if (addToHistory) {
         const seed = document.getElementById('seedExtractedValue')?.textContent.trim() || document.getElementById('evalSeedInput')?.value.trim() || 'unknown';
         pushEvalHistory(seed, verdictText);
@@ -947,6 +996,7 @@ function draw() {
     const container = canvas.parentElement;
     const btnSave = document.getElementById('btnDLSVG');
     btnSave.classList.add('hidden');
+    document.getElementById('btnCopyCanvas')?.classList.add('hidden');
 
     // Fit canvas to container, scaled for device pixel ratio (sharp on HiDPI)
     const rect = container.getBoundingClientRect();
@@ -960,8 +1010,24 @@ function draw() {
 
     const data = currentMode === 'generate' ? (currentTask ? (currentView === 'placement' ? currentTask.base : currentTask.transformed) : null) : evalData;
     updateCanvasDropHint();
-    if (!data) return;
+    if (!data) {
+        if (currentMode === 'generate') {
+            ctx.save();
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.globalAlpha = 0.35;
+            ctx.fillStyle = resolveCSSColor('--text-secondary');
+            ctx.font = 'bold 17px Inter, system-ui, sans-serif';
+            ctx.fillText('No task generated yet', W / 2, H / 2 - 14);
+            ctx.globalAlpha = 0.22;
+            ctx.font = '13px Inter, system-ui, sans-serif';
+            ctx.fillText('Press G or click Generate New Task', W / 2, H / 2 + 14);
+            ctx.restore();
+        }
+        return;
+    }
     btnSave.classList.remove('hidden');
+    document.getElementById('btnCopyCanvas')?.classList.remove('hidden');
 
     const alphaFor = key => {
         if (legendHoverKey) return legendHoverKey === key ? 1 : 0.12;
@@ -1029,6 +1095,7 @@ function draw() {
         const gxStart = Math.floor(minX / step) * step;
         const gyStart = Math.floor(minY / step) * step;
 
+        if (showGrid) {
         ctx.strokeStyle = gridColor; ctx.lineWidth = 0.4;
         ctx.fillStyle = textColor; ctx.font = `${fontSize}px Inter`;
 
@@ -1048,13 +1115,13 @@ function draw() {
                 ctx.fillText(`${y}`, toX(minX) - 5, toY(y));
             }
         }
+        } // end showGrid
 
         // Axis unit labels
+        if (showGrid) {
         ctx.font = `bold ${fontSize}px Inter`; ctx.fillStyle = axisColor;
-        // X label — centered below the grid
         ctx.textAlign = 'center'; ctx.textBaseline = 'top';
         ctx.fillText('X (cm)', (toX(minX) + toX(maxX)) / 2, toY(minY) + 16);
-        // Y label — centered to the left of the grid, rotated 90°
         const yCenterY = (toY(minY) + toY(maxY)) / 2;
         ctx.save();
         ctx.translate(toX(minX) - 28, yCenterY);
@@ -1062,6 +1129,7 @@ function draw() {
         ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
         ctx.fillText('Y (cm)', 0, 0);
         ctx.restore();
+        } // end showGrid axis labels
 
         // Workspace
         if (vis('workspace')) {
@@ -1585,6 +1653,7 @@ function _buildSVGString() {
         const gxStart = Math.floor(minX / step) * step, gyStart = Math.floor(minY / step) * step;
 
         // Vertical lines for world X, horizontal for world Y
+        if (showGrid) {
         for (let x = gxStart; x <= maxX; x += step) {
             const { cx } = map(x, minY, xShift), cy1 = map(x, minY, xShift).cy, cy2 = map(x, maxY, xShift).cy;
             svg += `<line x1="${cx}" y1="${cy1}" x2="${cx}" y2="${cy2}" stroke="${gridColor}" stroke-width="0.4" />`;
@@ -1595,12 +1664,15 @@ function _buildSVGString() {
             svg += `<line x1="${cx1}" y1="${cy}" x2="${cx2}" y2="${cy}" stroke="${gridColor}" stroke-width="0.4" />`;
             if (y % labelStep === 0) svg += `<text x="${cx1 - 5}" y="${cy}" fill="${textColor}" font-size="${fontSize}" text-anchor="end" dominant-baseline="middle">${y}</text>`;
         }
+        } // end showGrid
         const midCX = (map(minX, 0, xShift).cx + map(maxX, 0, xShift).cx) / 2;
         const bottomCY = map(0, minY, xShift).cy;
         const midCY = (map(0, minY, xShift).cy + map(0, maxY, xShift).cy) / 2;
         const leftCX = map(minX, 0, xShift).cx;
-        svg += `<text x="${midCX}" y="${bottomCY + 16}" fill="${axisColor}" font-size="${fontSize}" font-weight="bold" text-anchor="middle" dominant-baseline="hanging">X (cm)</text>`;
-        svg += `<text x="0" y="0" fill="${axisColor}" font-size="${fontSize}" font-weight="bold" text-anchor="middle" dominant-baseline="middle" transform="translate(${leftCX - 28},${midCY}) rotate(-90)">Y (cm)</text>`;
+        if (showGrid) {
+            svg += `<text x="${midCX}" y="${bottomCY + 16}" fill="${axisColor}" font-size="${fontSize}" font-weight="bold" text-anchor="middle" dominant-baseline="hanging">X (cm)</text>`;
+            svg += `<text x="0" y="0" fill="${axisColor}" font-size="${fontSize}" font-weight="bold" text-anchor="middle" dominant-baseline="middle" transform="translate(${leftCX - 28},${midCY}) rotate(-90)">Y (cm)</text>`;
+        }
 
         // Workspace
         if (vis('workspace')) {
@@ -1848,6 +1920,15 @@ function _buildSVGString() {
         const lpRule = (y) =>
             svg += `<line x1="${lp}" y1="${y}" x2="${LEFT_PANEL_W - lp}" y2="${y}" stroke="${borderProm}" stroke-width="1" />`;
 
+        // Seed at top of left panel
+        const evalSeedL = document.getElementById('seedExtractedValue')?.textContent.trim() || document.getElementById('evalSeedInput')?.value.trim() || '';
+        if (evalSeedL) {
+            lpText(lp, lpy, 'SEED', { fill: accentColor, size: 10, weight: 'bold' }); lpy += 6;
+            lpRule(lpy); lpy += lLineH - 4;
+            lpText(lp, lpy, evalSeedL, { size: 9 }); lpy += lLineH;
+            lpy += 4;
+        }
+
         lpText(lp, lpy, 'ITEM RESULTS', { fill: accentColor, size: 10, weight: 'bold' }); lpy += 6;
         lpRule(lpy); lpy += lLineH - 2;
 
@@ -2013,6 +2094,9 @@ window.onload = () => {
         b.classList.add('active'); currentView = b.dataset.tab; if (currentMode === 'generate') lastGenerateView = currentView; draw();
     });
     document.getElementById('generateBtn').onclick = () => generateTask();
+    document.getElementById('lockSeedBtn')?.addEventListener('click', toggleSeedLock);
+    document.getElementById('btnGridToggle')?.addEventListener('click', () => { showGrid = !showGrid; document.getElementById('btnGridToggle').classList.toggle('active', showGrid); draw(); });
+    document.getElementById('btnCopyCanvas')?.addEventListener('click', copyCanvasToClipboard);
     document.getElementById('runEvalBtn').onclick = runEvaluation;
     document.getElementById('runSeedEvalBtn').onclick = runSeedEvaluation;
     document.getElementById('runSeedEvalBtn2')?.addEventListener('click', runSeedEvaluation);
@@ -2026,7 +2110,7 @@ window.onload = () => {
         const modal = document.getElementById('qrModal');
         container.innerHTML = '';
         if (typeof QRCode !== 'undefined') {
-            new QRCode(container, { text: url, width: 200, height: 200, colorDark: '#000000', colorLight: '#ffffff' });
+            new QRCode(container, { text: url, width: 320, height: 320, colorDark: '#000000', colorLight: '#ffffff' });
         } else {
             container.textContent = url;
         }
@@ -2408,15 +2492,8 @@ window.onload = () => {
             case 'e': case 'E':
                 switchMode('evaluate');
                 break;
-            case 'ArrowUp':
+            case 'ArrowUp': {
                 e.preventDefault();
-                switchMode('generate');
-                break;
-            case 'ArrowDown':
-                e.preventDefault();
-                switchMode('evaluate');
-                break;
-            case 'ArrowLeft': {
                 if (currentMode === 'generate') {
                     const tabs = [...document.querySelectorAll('.tab-btn[data-tab]')];
                     const idx = tabs.findIndex(t => t.classList.contains('active'));
@@ -2424,7 +2501,8 @@ window.onload = () => {
                 }
                 break;
             }
-            case 'ArrowRight': {
+            case 'ArrowDown': {
+                e.preventDefault();
                 if (currentMode === 'generate') {
                     const tabs = [...document.querySelectorAll('.tab-btn[data-tab]')];
                     const idx = tabs.findIndex(t => t.classList.contains('active'));
@@ -2432,6 +2510,14 @@ window.onload = () => {
                 }
                 break;
             }
+            case 'ArrowLeft':
+                e.preventDefault();
+                switchMode('generate');
+                break;
+            case 'ArrowRight':
+                e.preventDefault();
+                switchMode('evaluate');
+                break;
             case 'r': case 'R':
                 resetViewport(); draw();
                 break;

@@ -2025,3 +2025,61 @@ kbd {
 }
 #qrSeedBtn:hover { opacity: 1; }
 #qrSeedBtn svg { width: 14px; height: 14px; }
+
+/* ─── Seed lock button ─────────────────────────────────────────────────────── */
+
+.seed-input-row {
+    display: flex;
+    gap: 0.4rem;
+    align-items: center;
+}
+.seed-input-row input {
+    flex: 1;
+    min-width: 0;
+}
+
+.seed-lock-btn {
+    flex-shrink: 0;
+    width: 34px;
+    height: 34px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--ui-btn-bg);
+    border: 1px solid var(--ui-border-prominent);
+    border-radius: 8px;
+    cursor: pointer;
+    color: var(--text-secondary);
+    transition: background 0.15s, border-color 0.15s, color 0.15s;
+    padding: 0;
+}
+.seed-lock-btn svg { width: 15px; height: 15px; }
+.seed-lock-btn .icon-lock { display: none; }
+.seed-lock-btn .icon-unlock { display: block; }
+.seed-lock-btn.locked { background: var(--accent-glow); border-color: var(--accent-primary); color: var(--accent-primary); }
+.seed-lock-btn.locked .icon-lock { display: block; }
+.seed-lock-btn.locked .icon-unlock { display: none; }
+.seed-lock-btn:hover { background: var(--ui-btn-hover); border-color: var(--accent-primary); }
+
+/* ─── Canvas control button positioning ────────────────────────────────────── */
+
+#btnGridToggle  { top: 0.6rem; left: 0.6rem; }
+#btnResetViewport { top: calc(0.6rem + 2.4rem + 0.4rem); left: 0.6rem; }
+#btnCopyCanvas  { top: calc(0.6rem + 2.4rem + 0.4rem); left: auto; right: 0.6rem; }
+.canvas-ctrl-btn.active { background: var(--accent-glow); border-color: var(--accent-primary); }
+.canvas-ctrl-btn.active svg { color: var(--accent-primary); }
+.canvas-ctrl-btn.copied { border-color: var(--success); }
+.canvas-ctrl-btn.copied svg { color: var(--success); }
+
+/* ─── Verdict badge animation ──────────────────────────────────────────────── */
+
+@keyframes verdictPulse {
+    0%   { transform: scale(0.88); opacity: 0.6; }
+    55%  { transform: scale(1.05); opacity: 1; }
+    100% { transform: scale(1);    opacity: 1; }
+}
+.verdict-box.verdict-pulse { animation: verdictPulse 0.4s cubic-bezier(0.34, 1.56, 0.64, 1) both; }
+
+/* ─── QR modal — larger ────────────────────────────────────────────────────── */
+
+.qr-code-container { padding: 1.5rem 1.5rem 0.75rem; margin: 1rem 1rem 0; }
