@@ -1665,3 +1665,115 @@ input:checked+.slider:before {
     padding: 1.5rem 0;
     text-align: center;
 }
+
+/* ─── Responsive / Mobile ───────────────────────────────────────────────── */
+
+@media (max-width: 768px) {
+    body {
+        height: auto;
+        overflow: auto;
+    }
+
+    .container {
+        height: auto;
+        min-height: 100svh;
+        padding: 0.5rem 0.75rem;
+        gap: 0.4rem;
+    }
+
+    h1 {
+        font-size: 1.25rem;
+    }
+
+    .subtitle {
+        font-size: 0.8rem;
+    }
+
+    .header-section {
+        padding: 0.4rem 0.75rem;
+    }
+
+    .theme-toggle-btn {
+        width: 36px;
+        height: 36px;
+        right: 0.75rem;
+        font-size: 1rem;
+    }
+
+    .mode-btn {
+        padding: 0.6rem 1rem;
+        font-size: 0.85rem;
+    }
+
+    .mode-toggle-container {
+        margin-bottom: 0.3rem;
+    }
+
+    .main-grid {
+        grid-template-columns: 1fr;
+        gap: 0.75rem;
+        flex: none;
+        min-height: auto;
+    }
+
+    /* Controls panel: no scroll, full height */
+    .controls-section {
+        overflow-y: visible;
+        padding-right: 0;
+        max-height: none;
+    }
+
+    /* Canvas section: fixed height so map is usable */
+    .visualization-section {
+        height: 70svh;
+        min-height: 320px;
+    }
+
+    /* Tabs row: wrap on tiny screens */
+    .tabs-row {
+        flex-wrap: wrap;
+    }
+
+    /* Save-bulk buttons: allow text to wrap a bit */
+    .save-bulk-btn {
+        font-size: 0.68rem;
+    }
+
+    /* Tooltips: anchor to left or right edge of button to avoid off-screen */
+    .save-bulk-tooltip {
+        min-width: 140px;
+    }
+
+    /* Legend: tighter */
+    .legend {
+        gap: 0.6rem;
+        padding: 0.5rem;
+    }
+
+    .legend-item {
+        font-size: 0.8rem;
+    }
+
+    /* Eval stats: 2-col stays fine on most phones, but go 1-col if very narrow */
+    @media (max-width: 400px) {
+        .eval-stats-grid {
+            grid-template-columns: 1fr;
+        }
+    }
+
+    /* Info-tip tooltip: ensure it doesn't overflow on mobile */
+    .info-tip .tip-content {
+        width: min(260px, 90vw);
+        left: auto;
+        right: 0;
+        transform: none;
+    }
+
+    /* Verdict tooltip: keep within screen */
+    .verdict-tooltip {
+        width: min(220px, 85vw);
+        left: auto;
+        right: 0;
+        transform: none;
+    }
+}
