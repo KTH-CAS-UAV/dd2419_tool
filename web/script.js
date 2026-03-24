@@ -110,6 +110,8 @@ let evalHistory = [];
 let hoverWorldCoords = null; // {x, y} in world cm, updated on mousemove
 let seedLocked = false;      // When true, seed input is frozen and reused every generate
 let showGrid = true;         // Toggle grid overlay on canvas
+let pinnedItem = null;       // Item pinned by double-click; tooltip stays visible
+let pinnedMouse = { x: 0, y: 0 }; // Canvas-container position when item was pinned
 
 function startLegendFade() {
     if (legendFadeRAF) cancelAnimationFrame(legendFadeRAF);
@@ -127,6 +129,8 @@ function startLegendFade() {
     legendFadeRAF = requestAnimationFrame(step);
 }
 let hoverMouse = { x: 0, y: 0 }; // Mouse position relative to canvas element (CSS px)
+let hoverViewport = { x: 0, y: 0 }; // Mouse position in viewport (clientX/Y) for fixed tooltip
+let pinnedViewport = { x: 0, y: 0 }; // Viewport position when tooltip was pinned
 const layerVisible = {}; // false = hidden, undefined/true = visible
 const vis = (key) => layerVisible[key] !== false;
 
@@ -233,6 +237,17 @@ function copyResultsToClipboard() {
             setTimeout(() => btn.classList.remove('copied'), 1800);
         }
     }).catch(() => {});
+}
+
+function resetEvalDefaults() {
+    document.getElementById('evalThreshold').value = 20;
+    document.getElementById('minDiscObj').value = 2;
+    document.getElementById('minDiscBox').value = 1;
+    if (evaluationResult) {
+        const activeMethod = document.querySelector('.eval-method-btn.active')?.dataset.method;
+        if (activeMethod === 'seed') runSeedEvaluation(false);
+        else runEvaluation(false);
+    }
 }
 
 function getThreshold() { return Math.max(0, parseInt(document.getElementById('evalThreshold')?.value) || 20); }
@@ -469,6 +484,7 @@ function updateThemeIcon(theme) {
 function switchMode(mode) {
     currentMode = mode;
     panelHoverItem = null;
+    pinnedItem = null;
     document.querySelectorAll('.mode-btn').forEach(btn => btn.classList.toggle('active', btn.dataset.mode === mode));
     document.getElementById('generateControls').classList.toggle('hidden', mode !== 'generate');
     document.getElementById('evaluateControls').classList.toggle('hidden', mode !== 'evaluate');
@@ -529,6 +545,7 @@ function generateTask() {
     else { seedInputEl.value = String(randomSeed); } // keep locked value visible
 
     currentTask = recreateTask(params.nkO, params.nuO, params.nkB, params.nuB, params.nObs, !!params.doTrans);
+    animateTaskIn();
     document.getElementById('downloads').classList.remove('hidden');
     updateSaveTooltips();
     resetViewport();
@@ -544,8 +561,10 @@ function updateSaveTooltips() {
     });
 }
 
-/** Recreates task data given parameters and an active PRNG */
-function recreateTask(nkO, nuO, nkB, nuB, nObs, doTrans) {
+/** Recreates task data given parameters and an active PRNG.
+ *  obsSeed: if provided, obstacles use this independent seed instead of the main PRNG,
+ *           allowing obstacle-only re-rolls without changing anything else. */
+function recreateTask(nkO, nuO, nkB, nuB, nObs, doTrans, obsSeed = null) {
     // 1. Transform (first — stays stable when only counts change with a locked seed)
     const translate = doTrans ? { x: randomInt(-500, 500), y: randomInt(-500, 500) } : { x: 0, y: 0 };
     const angleRad = doTrans ? (getRand() * 2 * Math.PI) : 0;
@@ -563,12 +582,16 @@ function recreateTask(nkO, nuO, nkB, nuB, nObs, doTrans) {
     const knownObjs = allObjs.slice(0, nkO);
     const unknownObjs = allObjs.slice(nkO);
 
-    // 5. Obstacles (last — count can change freely)
+    // 5. Obstacles — use a separate PRNG so they can be re-rolled independently
+    const resolvedObsSeed = obsSeed ?? Math.floor(getRand() * 1000000);
+    const obsRng = mulberry32(resolvedObsSeed);
+    const obsRandomInt = (min, max) => Math.floor(obsRng() * (max - min + 1)) + min;
+
     const obstacles = [];
     const forbidden = [startPose, ...allObjs, ...allBoxes];
     let attempts = 0;
     while (obstacles.length < nObs && attempts < 100) {
-        const obs = { x: randomInt(OBSTACLE_X_RANGE[0], OBSTACLE_X_RANGE[1]), y: randomInt(OBSTACLE_Y_RANGE[0], OBSTACLE_Y_RANGE[1]) };
+        const obs = { x: obsRandomInt(OBSTACLE_X_RANGE[0], OBSTACLE_X_RANGE[1]), y: obsRandomInt(OBSTACLE_Y_RANGE[0], OBSTACLE_Y_RANGE[1]) };
         const tooClose = forbidden.some(f => Math.sqrt((f.x - obs.x) ** 2 + (f.y - obs.y) ** 2) < OBSTACLE_DISTANCE_THRESHOLD) ||
             obstacles.some(o => Math.sqrt((o.x - obs.x) ** 2 + (o.y - obs.y) ** 2) < OBSTACLE_DISTANCE_THRESHOLD);
         if (!tooClose) obstacles.push(obs);
@@ -578,7 +601,7 @@ function recreateTask(nkO, nuO, nkB, nuB, nObs, doTrans) {
     const transform = (i) => applyTransform(i, translate, angleRad);
     const transformPoint = (p) => { const r = rotatePoint(p.x, p.y, angleRad); return { x: r.x + translate.x, y: r.y + translate.y }; };
     return {
-        seed: currentSeed,
+        seed: currentSeed, obsSeed: resolvedObsSeed,
         params: { nkO, nuO, nkB, nuB, nObs, doTrans },
         transform: { translate, angleRad },
         base: { workspace: WORKSPACE_DATA, startPose, knownObjs, unknownObjs, knownBoxes, unknownBoxes, obstacles },
@@ -590,6 +613,22 @@ function recreateTask(nkO, nuO, nkB, nuB, nObs, doTrans) {
             obstacles: obstacles.map(transformPoint)
         }
     };
+}
+
+function animateTaskIn() {
+    const canvas = document.getElementById('mapCanvas');
+    canvas.style.opacity = '0';
+    requestAnimationFrame(() => { canvas.style.opacity = '1'; });
+}
+
+function regenerateObstacles() {
+    if (!currentTask) return;
+    const p = currentTask.params;
+    setSeed(currentTask.seed);
+    const newObsSeed = Math.floor(Math.random() * 1000000);
+    currentTask = recreateTask(p.nkO, p.nuO, p.nkB, p.nuB, p.nObs, p.doTrans, newObsSeed);
+    animateTaskIn();
+    draw();
 }
 
 async function runEvaluation(switchToResults = true) {
@@ -1010,6 +1049,8 @@ function draw() {
 
     const data = currentMode === 'generate' ? (currentTask ? (currentView === 'placement' ? currentTask.base : currentTask.transformed) : null) : evalData;
     updateCanvasDropHint();
+    const hasContent = !!data;
+    document.getElementById('btnGridToggle')?.classList.toggle('hidden', !hasContent);
     if (!data) {
         if (currentMode === 'generate') {
             ctx.save();
@@ -1021,7 +1062,7 @@ function draw() {
             ctx.fillText('No task generated yet', W / 2, H / 2 - 14);
             ctx.globalAlpha = 0.22;
             ctx.font = '13px Inter, system-ui, sans-serif';
-            ctx.fillText('Press G or click Generate New Task', W / 2, H / 2 + 14);
+            ctx.fillText('Press Space or click Generate New Task', W / 2, H / 2 + 14);
             ctx.restore();
         }
         return;
@@ -1274,7 +1315,7 @@ function draw() {
         }
     }
 
-    const activeHighlight = hoverItem || panelHoverItem;
+    const activeHighlight = hoverItem || panelHoverItem || pinnedItem;
     if (activeHighlight) {
         const hoverItem = activeHighlight; // shadow for the block below
         const threshR = getThreshold() * scale;
@@ -1346,13 +1387,17 @@ function draw() {
         const text = `${hoverWorldCoords.x.toFixed(1)}, ${hoverWorldCoords.y.toFixed(1)} cm`;
         ctx.save();
         ctx.font = '11px Inter, system-ui, sans-serif';
+        ctx.textAlign = 'left';
+        ctx.textBaseline = 'alphabetic';
         const tw = ctx.measureText(text).width;
-        const pad = 5, bx = 10, by = H - 30;
-        ctx.fillStyle = 'rgba(0,0,0,0.5)';
+        const pad = 5;
+        const bx = 16;
+        const by = H - 30;
+        ctx.fillStyle = 'rgba(0,0,0,0.55)';
         ctx.beginPath();
         ctx.roundRect(bx - pad, by - pad, tw + pad * 2, 20, 4);
         ctx.fill();
-        ctx.fillStyle = 'rgba(255,255,255,0.92)';
+        ctx.fillStyle = 'rgba(255,255,255,0.93)';
         ctx.fillText(text, bx, by + 11);
         ctx.restore();
     }
@@ -1364,10 +1409,13 @@ function draw() {
 
 function updateHoverTooltip() {
     const el = document.getElementById('mapTooltip');
-    if (!hoverItem) { el.classList.add('hidden'); return; }
+    const isShowingPinned = !hoverItem && !!pinnedItem;
+    const item = hoverItem || pinnedItem;
+    if (!item) { el.classList.add('hidden'); return; }
+    el.classList.toggle('map-tooltip--pinned', isShowingPinned);
 
-    if (hoverItem._isMatch) {
-        const m = hoverItem._matchRef;
+    if (item._isMatch) {
+        const m = item._matchRef;
         const type = m.gt.Type === 'B' ? 'Box' : 'Object';
         el.innerHTML =
             `<div class="map-tooltip-label">Match — ${type}</div>` +
@@ -1375,28 +1423,25 @@ function updateHoverTooltip() {
             `<div class="map-tooltip-row"><span>GT x,y</span><span>${m.gt.x.toFixed(1)}, ${m.gt.y.toFixed(1)}</span></div>` +
             `<div class="map-tooltip-row"><span>sol x,y</span><span>${m.sol.x.toFixed(1)}, ${m.sol.y.toFixed(1)}</span></div>`;
     } else {
-        const label = hoverItem._label || hoverItem.Type || 'Item';
-        const hasAngle = hoverItem.angle !== undefined && hoverItem.angle !== null;
-        const ref = hoverItem._ref || hoverItem;
+        const label = item._label || item.Type || 'Item';
+        const hasAngle = item.angle !== undefined && item.angle !== null;
+        const ref = item._ref || item;
         const match = evaluationResult?.matches?.find(m => m.gt === ref || m.sol === ref);
-
-        const nearestDist = !match ? getHoverNearestDist(hoverItem) : null;
+        const nearestDist = !match ? getHoverNearestDist(item) : null;
 
         el.innerHTML =
             `<div class="map-tooltip-label">${label}</div>` +
-            `<div class="map-tooltip-row"><span>x</span><span>${hoverItem.x.toFixed(1)} cm</span></div>` +
-            `<div class="map-tooltip-row"><span>y</span><span>${hoverItem.y.toFixed(1)} cm</span></div>` +
-            (hasAngle ? `<div class="map-tooltip-row"><span>angle</span><span>${hoverItem.angle.toFixed(1)}°</span></div>` : '') +
+            `<div class="map-tooltip-row"><span>x</span><span>${item.x.toFixed(1)} cm</span></div>` +
+            `<div class="map-tooltip-row"><span>y</span><span>${item.y.toFixed(1)} cm</span></div>` +
+            (hasAngle ? `<div class="map-tooltip-row"><span>angle</span><span>${item.angle.toFixed(1)}°</span></div>` : '') +
             (match ? `<div class="map-tooltip-row"><span>error</span><span>${match.dist.toFixed(1)} cm</span></div>` : '') +
             (nearestDist !== null ? `<div class="map-tooltip-row"><span>nearest</span><span>${nearestDist.toFixed(1)} cm</span></div>` : '');
     }
 
-    // Position near cursor, flip if near right edge
-    const container = el.parentElement;
-    const cw = container.clientWidth;
-    const cx = hoverMouse.x;
-    const cy = hoverMouse.y;
-    const flipX = cx > cw * 0.72;
+    // Position using fixed viewport coordinates (tooltip is position:fixed at body level)
+    const vpos = isShowingPinned ? pinnedViewport : hoverViewport;
+    const cx = vpos.x, cy = vpos.y;
+    const flipX = cx > window.innerWidth * 0.72;
     el.style.left = `${cx}px`;
     el.style.right = '';
     el.style.top = `${cy}px`;
@@ -2110,7 +2155,7 @@ window.onload = () => {
         const modal = document.getElementById('qrModal');
         container.innerHTML = '';
         if (typeof QRCode !== 'undefined') {
-            new QRCode(container, { text: url, width: 320, height: 320, colorDark: '#000000', colorLight: '#ffffff' });
+            new QRCode(container, { text: url, width: 420, height: 420, colorDark: '#000000', colorLight: '#ffffff' });
         } else {
             container.textContent = url;
         }
@@ -2119,6 +2164,15 @@ window.onload = () => {
     });
     document.getElementById('qrModalClose')?.addEventListener('click', () => document.getElementById('qrModal').classList.add('hidden'));
     document.getElementById('qrModal')?.addEventListener('click', e => { if (e.target === e.currentTarget) e.currentTarget.classList.add('hidden'); });
+    document.getElementById('qrCopyLinkBtn')?.addEventListener('click', () => {
+        const url = document.getElementById('qrUrlText').textContent;
+        if (!url) return;
+        navigator.clipboard.writeText(url).then(() => {
+            const btn = document.getElementById('qrCopyLinkBtn');
+            btn.classList.add('copied');
+            setTimeout(() => btn.classList.remove('copied'), 1800);
+        }).catch(() => {});
+    });
 
     // Keyboard shortcuts modal
     document.getElementById('shortcutsBtn')?.addEventListener('click', () => document.getElementById('shortcutsModal').classList.toggle('hidden'));
@@ -2261,9 +2315,10 @@ window.onload = () => {
         const x = e.clientX - rect.left;
         const y = e.clientY - rect.top;
 
-        // Store CSS-pixel mouse position relative to canvas-container for tooltip placement
+        // Store mouse positions for canvas coord readout and fixed tooltip positioning
         const containerRect = canvas.parentElement.getBoundingClientRect();
         hoverMouse = { x: e.clientX - containerRect.left, y: e.clientY - containerRect.top };
+        hoverViewport = { x: e.clientX, y: e.clientY };
 
         const data = currentMode === 'generate' ? (currentTask ? (currentView === 'placement' ? currentTask.base : currentTask.transformed) : null) : evalData;
         if (!data) { hoverWorldCoords = null; return; }
@@ -2437,8 +2492,29 @@ window.onload = () => {
         if (vpDragStart) { vpDragStart = null; mapCanvas.style.cursor = ''; }
     });
 
-    // Double-click to reset
-    mapCanvas.addEventListener('dblclick', () => { resetViewport(); draw(); });
+    // Double-click: pin tooltip on item, reset viewport on empty space
+    mapCanvas.addEventListener('dblclick', () => {
+        if (hoverItem) {
+            // Toggle pin on the item under cursor
+            if (pinnedItem && pinnedItem === hoverItem) {
+                pinnedItem = null;
+            } else {
+                pinnedItem = hoverItem;
+                pinnedMouse = { ...hoverMouse };
+                pinnedViewport = { ...hoverViewport };
+            }
+            draw();
+        } else {
+            pinnedItem = null;
+            resetViewport();
+            draw();
+        }
+    });
+
+    // Single-click on empty canvas space clears pin
+    mapCanvas.addEventListener('click', () => {
+        if (!hoverItem && pinnedItem) { pinnedItem = null; draw(); }
+    });
 
     // Touch pinch-to-zoom + single-finger pan
     mapCanvas.addEventListener('touchstart', (e) => {
@@ -2486,11 +2562,13 @@ window.onload = () => {
         if (e.target.matches('input, textarea, select')) return;
         switch (e.key) {
             case 'g': case 'G':
-                if (currentMode === 'generate') generateTask();
-                else switchMode('generate');
+                showGrid = !showGrid;
+                document.getElementById('btnGridToggle')?.classList.toggle('active', showGrid);
+                draw();
                 break;
-            case 'e': case 'E':
-                switchMode('evaluate');
+            case ' ':
+                e.preventDefault();
+                if (currentMode === 'generate') generateTask();
                 break;
             case 'ArrowUp': {
                 e.preventDefault();

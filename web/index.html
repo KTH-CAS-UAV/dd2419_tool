@@ -95,6 +95,7 @@
 
                     <div class="actions">
                         <button id="generateBtn" class="primary-btn">Generate New Task</button>
+                        <button id="regenObsBtn" class="secondary-btn hidden" onclick="regenerateObstacles()" title="Re-roll obstacle positions only — everything else stays the same">Regenerate Obstacles</button>
                     </div>
                     <div id="recentSeedsWrap" class="hidden" style="margin-top: 0.75rem;">
                         <div class="recent-seeds-label">Recent</div>
@@ -307,7 +308,7 @@
                                 <span>Save Results</span>
                             </button>
                         </div>
-                        <div id="evalSettingsDivider" class="divider hidden">Settings <span class="info-tip" tabindex="0"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg><span class="tip-content">These values should match the agreed course requirements. The default values reflect those requirements: threshold 20 cm, at least 2 discovered objects, and at least 1 discovered box. Each penalty object removes one point from the discovered object count, and each penalty box removes one point from the discovered box count.</span></span></div>
+                        <div id="evalSettingsDivider" class="divider hidden">Settings <span class="info-tip" tabindex="0"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg><span class="tip-content">These values should match the agreed course requirements. The default values reflect those requirements: threshold 20 cm, at least 2 discovered objects, and at least 1 discovered box. Each penalty object removes one point from the discovered object count, and each penalty box removes one point from the discovered box count.</span></span><button id="resetEvalDefaultsBtn" class="divider-copy-btn" title="Reset to defaults" onclick="resetEvalDefaults()"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg></button></div>
                         <div id="evalSettingsGrid" class="eval-results-settings hidden">
                             <div class="input-field eval-setting-field eval-setting-field--full">
                                 <label for="evalThreshold">Threshold (cm)</label>
@@ -383,7 +384,6 @@
                             <rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
                         </svg>
                     </button>
-                    <div id="mapTooltip" class="map-tooltip hidden"></div>
                     <div id="canvasDropHint" class="canvas-drop-hint hidden">
                         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
                             stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
@@ -428,14 +428,15 @@
             </div>
             <table class="shortcuts-table">
                 <tbody>
-                    <tr><td><kbd>G</kbd></td><td>Generate new task</td></tr>
-                    <tr><td><kbd>E</kbd></td><td>Switch to evaluate mode</td></tr>
+                    <tr><td><kbd>Space</kbd></td><td>Generate new task</td></tr>
+                    <tr><td><kbd>G</kbd></td><td>Toggle grid overlay</td></tr>
                     <tr><td><kbd>↑</kbd> / <kbd>↓</kbd></td><td>Cycle canvas tabs</td></tr>
                     <tr><td><kbd>←</kbd></td><td>Switch to generate mode</td></tr>
                     <tr><td><kbd>→</kbd></td><td>Switch to evaluate mode</td></tr>
                     <tr><td><kbd>R</kbd></td><td>Reset viewport zoom/pan</td></tr>
                     <tr><td><kbd>Scroll</kbd></td><td>Zoom in/out on map</td></tr>
                     <tr><td><kbd>Drag</kbd></td><td>Pan map</td></tr>
+                    <tr><td><kbd>Double-click</kbd></td><td>Pin/unpin tooltip on item; reset view on empty</td></tr>
                     <tr><td><kbd>?</kbd></td><td>Show this overlay</td></tr>
                     <tr><td><kbd>Esc</kbd></td><td>Close overlays</td></tr>
                 </tbody>
@@ -451,9 +452,20 @@
                 <button id="qrModalClose" class="modal-close-btn" title="Close">&times;</button>
             </div>
             <div id="qrCodeContainer" class="qr-code-container"></div>
-            <p id="qrUrlText" class="qr-url-text"></p>
+            <div class="qr-link-row">
+                <span class="qr-link-label">Link</span>
+                <span id="qrUrlText" class="qr-url-value"></span>
+                <button id="qrCopyLinkBtn" class="qr-link-copy-btn" title="Copy link">
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <rect x="9" y="9" width="13" height="13" rx="2" />
+                        <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+                    </svg>
+                </button>
+            </div>
         </div>
     </div>
+
+    <div id="mapTooltip" class="map-tooltip hidden"></div>
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
