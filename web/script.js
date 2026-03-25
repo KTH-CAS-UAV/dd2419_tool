@@ -395,10 +395,9 @@ function copyResultsToClipboard() {
     const perfect = s.knownMatched === s.knownTotal && s.unknownMatched === s.unknownTotal && s.penaltyObjs === 0 && s.penaltyBoxes === 0;
     const accepted = effObj >= minDiscObj && effBox >= minDiscBox;
     const verdict = perfect ? 'Perfect' : missingMaintained > 0 ? 'Failed (missing maintained)' : accepted ? 'Accepted' : 'Failed';
-    const seed = document.getElementById('evalTaskShortId')?.textContent.trim() || 'unknown';
     const avgErr = evaluationResult.matches.length ? (evaluationResult.matches.reduce((a, m) => a + m.dist, 0) / evaluationResult.matches.length).toFixed(1) : 'N/A';
     const text = [
-        `DD2419 Evaluation — ${seed}`,
+        `DD2419 Evaluation Results`,
         `Verdict: ${verdict}`,
         ``,
         `Maintained Obj:  ${s.knownObjMatched}/${s.knownObjTotal}`,
